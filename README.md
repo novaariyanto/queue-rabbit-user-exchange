@@ -29,7 +29,7 @@ Catatan: contoh ini development-ready, bukan full production-hardened. Tambahan 
 
 ```
 RABBIT_URL=amqp://guest:guest@localhost:5672
-PORT=3000
+PORT=3001
 ADMIN_API_KEY=change-me
 PREFETCH=5
 SHARD_COUNT=10
@@ -42,7 +42,7 @@ DEFAULT_QUEUE_TTL_MS=600000
 2. Jalankan RabbitMQ lokal atau via Docker (`docker-compose up rabbitmq`)
 3. Jalankan API: `npm run start`
 4. Jalankan Worker: `npm run worker`
-5. Buka Admin Panel: `http://localhost:3000/` (isi API key header di UI)
+5. Buka Admin Panel: `http://localhost:3001/` (isi API key header di UI)
 
 ## Menjalankan dengan Docker Compose
 
@@ -50,14 +50,14 @@ DEFAULT_QUEUE_TTL_MS=600000
 docker-compose up -d --build
 ```
 
-- API di `http://localhost:3000`
+- API di `http://localhost:3001`
 - RabbitMQ Management UI di `http://localhost:15672` (guest/guest)
 
 ## API Endpoints
 
 - `POST /create-queue` body: `{ "userId": "u1", "ttlMs": 600000 }`
   - Result: `{ success, queueName, routingKey }`
-- `POST /send-message` body: `{ "userId": "u1", "callbackUrl": "http://localhost:3000/_test/callback", "payload": { "hello": "world" } }`
+- `POST /send-message` body: `{ "userId": "u1", "callbackUrl": "http://localhost:3001/_test/callback", "payload": { "hello": "world" } }`
   - Result: `{ success, messageId }`
 - Admin (kirim header `x-api-key: <ADMIN_API_KEY>`)
   - `POST /admin/stop-consumer` `{ userId }`
@@ -70,17 +70,17 @@ docker-compose up -d --build
 ### Contoh curl
 
 ```
-curl -X POST http://localhost:3000/create-queue -H "Content-Type: application/json" -d '{"userId":"u1"}'
+curl -X POST http://localhost:3001/create-queue -H "Content-Type: application/json" -d '{"userId":"u1"}'
 
-curl -X POST http://localhost:3000/send-message -H "Content-Type: application/json" \
-  -d '{"userId":"u1","callbackUrl":"http://localhost:3000/_test/callback","payload":{"hello":"world"}}'
+curl -X POST http://localhost:3001/send-message -H "Content-Type: application/json" \
+  -d '{"userId":"u1","callbackUrl":"http://localhost:3001/_test/callback","payload":{"hello":"world"}}'
 
-curl -X POST http://localhost:3000/admin/start-consumer -H "x-api-key: change-me" -H "Content-Type: application/json" -d '{"userId":"u1"}'
-curl -X POST http://localhost:3000/admin/stop-consumer -H "x-api-key: change-me" -H "Content-Type: application/json" -d '{"userId":"u1"}'
-curl -X POST http://localhost:3000/admin/reset-queue -H "x-api-key: change-me" -H "Content-Type: application/json" -d '{"userId":"u1"}'
-curl -X POST http://localhost:3000/admin/stop-all -H "x-api-key: change-me"
-curl -X POST http://localhost:3000/admin/reset-all -H "x-api-key: change-me"
-curl -X GET http://localhost:3000/admin/queues -H "x-api-key: change-me"
+curl -X POST http://localhost:3001/admin/start-consumer -H "x-api-key: change-me" -H "Content-Type: application/json" -d '{"userId":"u1"}'
+curl -X POST http://localhost:3001/admin/stop-consumer -H "x-api-key: change-me" -H "Content-Type: application/json" -d '{"userId":"u1"}'
+curl -X POST http://localhost:3001/admin/reset-queue -H "x-api-key: change-me" -H "Content-Type: application/json" -d '{"userId":"u1"}'
+curl -X POST http://localhost:3001/admin/stop-all -H "x-api-key: change-me"
+curl -X POST http://localhost:3001/admin/reset-all -H "x-api-key: change-me"
+curl -X GET http://localhost:3001/admin/queues -H "x-api-key: change-me"
 ```
 
 ### Endpoint Callback Uji (untuk demo)

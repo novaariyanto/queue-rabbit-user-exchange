@@ -10,7 +10,7 @@ const db = require('./db');
 const qm = require('./queue-manager');
 
 const app = express();
-const PORT = Number(process.env.PORT || 3000);
+const PORT = Number(process.env.PORT || 3001);
 
 app.use(express.json({ limit: '1mb' }));
 app.use(morgan('dev'));
@@ -56,8 +56,13 @@ app.post('/create-queue', async (req, res) => {
 // B. POST /send-message
 app.post('/send-message', async (req, res) => {
   try {
-    const { userId, callbackUrl, payload, options } = req.body || {};
-    if (!isNonEmptyString(userId)) return res.status(400).json({ error: 'userId required (string)' });
+    // Dukungan alias: instance_key sebagai userId
+    const userId = req.body?.userId || req.body?.instance_key;
+    const { callbackUrl, payload, options } = req.body || {};
+    const delaySeconds = req.body?.delaySeconds;
+    const delayMs = req.body?.delayMs ?? (typeof delaySeconds === 'number' ? delaySeconds * 1000 : undefined);
+
+    if (!isNonEmptyString(userId)) return res.status(400).json({ error: 'userId/instance_key required (string)' });
     if (!isNonEmptyString(callbackUrl)) return res.status(400).json({ error: 'callbackUrl required (string)' });
     if (typeof payload === 'undefined') return res.status(400).json({ error: 'payload required' });
 
@@ -70,7 +75,7 @@ app.post('/send-message', async (req, res) => {
     }
 
     const ts = Date.now();
-    const messageId = await qm.publishToUser(userId, { userId, callbackUrl, payload, ts }, options || {});
+    const messageId = await qm.publishToUser(userId, { userId, callbackUrl, payload, ts, delayMs }, options || {});
     return res.json({ success: true, messageId });
   } catch (e) {
     return res.status(500).json({ error: e.message || 'failed' });

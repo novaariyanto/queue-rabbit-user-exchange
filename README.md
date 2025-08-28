@@ -57,7 +57,7 @@ docker-compose up -d --build
 
 - `POST /create-queue` body: `{ "userId": "u1", "ttlMs": 600000 }`
   - Result: `{ success, queueName, routingKey }`
-- `POST /send-message` body: `{ "userId": "u1", "callbackUrl": "http://localhost:3001/_test/callback", "payload": { "hello": "world" } }`
+- `POST /send-message` body: `{ "userId": "u1" | "instance_key": "u1", "callbackUrl": "http://localhost:3001/_test/callback", "payload": { "hello": "world" }, "delaySeconds": 5 }`
   - Result: `{ success, messageId }`
 - Admin (kirim header `x-api-key: <ADMIN_API_KEY>`)
   - `POST /admin/stop-consumer` `{ userId }`
@@ -73,7 +73,7 @@ docker-compose up -d --build
 curl -X POST http://localhost:3001/create-queue -H "Content-Type: application/json" -d '{"userId":"u1"}'
 
 curl -X POST http://localhost:3001/send-message -H "Content-Type: application/json" \
-  -d '{"userId":"u1","callbackUrl":"http://localhost:3001/_test/callback","payload":{"hello":"world"}}'
+  -d '{"instance_key":"u1","callbackUrl":"http://localhost:3001/_test/callback","payload":{"hello":"world"},"delaySeconds":5}'
 
 curl -X POST http://localhost:3001/admin/start-consumer -H "x-api-key: change-me" -H "Content-Type: application/json" -d '{"userId":"u1"}'
 curl -X POST http://localhost:3001/admin/stop-consumer -H "x-api-key: change-me" -H "Content-Type: application/json" -d '{"userId":"u1"}'

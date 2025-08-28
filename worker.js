@@ -10,7 +10,8 @@ const axios = require('axios');
 const db = require('./db');
 const qm = require('./queue-manager');
 
-const PREFETCH = Number(process.env.PREFETCH || 5);
+// Untuk menjaga urutan per user, gunakan prefetch=1 sehingga FIFO per queue terjaga
+const PREFETCH = Number(process.env.PREFETCH || 1);
 const MAX_RETRY = 5; // contoh batas percobaan untuk backoff
 
 let consumeChannel = null;
@@ -39,7 +40,7 @@ async function startConsumer(userId) {
     try {
       const content = msg.content ? msg.content.toString('utf-8') : '{}';
       const data = JSON.parse(content);
-      const { userId: uid, callbackUrl, payload } = data || {};
+      const { userId: uid, callbackUrl, payload, delayMs } = data || {};
 
       if (!callbackUrl) {
         // Tidak ada callbackUrl → drop dengan log
@@ -51,6 +52,10 @@ async function startConsumer(userId) {
         return;
       }
 
+      // Jika ada delayMs, tunda eksekusi sebelum forward HTTP
+      if (typeof delayMs === 'number' && delayMs > 0) {
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
       // Forward HTTP
       await axios.post(callbackUrl, payload, { timeout: 10000 });
 

@@ -126,3 +126,14 @@ curl -X GET http://localhost:3001/admin/queues -H "x-api-key: change-me"
 
 
 
+
+<!-- reset docker -->
+docker-compose down --rmi all --volumes --remove-orphans
+docker-compose up --build -d
+
+<!-- docker rebuild -->
+docker-compose up --build -d
+
+<!-- run docker  -->
+docker-compose build --no-cache
+docker-compose up -d

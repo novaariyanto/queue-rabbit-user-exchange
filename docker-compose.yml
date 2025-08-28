@@ -2,7 +2,7 @@ version: '3.9'
 services:
   rabbitmq:
     image: rabbitmq:3.13-management
-    container_name: rabbitmq
+    container_name: queue-rabbitmq
     ports:
       - "5672:5672"
       - "15672:15672" # RabbitMQ Management UI
@@ -15,12 +15,12 @@ services:
     container_name: user-queue-api
     environment:
       - RABBIT_URL=amqp://guest:guest@rabbitmq:5672
-      - PORT=3000
+      - PORT=3001
       - ADMIN_API_KEY=change-me
       - PREFETCH=5
       - DEFAULT_QUEUE_TTL_MS=600000
     ports:
-      - "3000:3000"
+      - "3001:3001"
     depends_on:
       - rabbitmq
 

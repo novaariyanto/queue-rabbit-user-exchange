@@ -17,7 +17,7 @@ services:
       - RABBIT_URL=amqp://guest:guest@rabbitmq:5672
       - PORT=3001
       - ADMIN_API_KEY=change-me
-      - PREFETCH=5
+      - PREFETCH=1
       - DEFAULT_QUEUE_TTL_MS=600000
     ports:
       - "3001:3001"
@@ -27,10 +27,9 @@ services:
   app-worker:
     build: .
     container_name: user-queue-worker
-    command: ["node", "worker.js"]
     environment:
       - RABBIT_URL=amqp://guest:guest@rabbitmq:5672
-      - PREFETCH=5
+      - PREFETCH=1
       - DEFAULT_QUEUE_TTL_MS=600000
     depends_on:
       - rabbitmq

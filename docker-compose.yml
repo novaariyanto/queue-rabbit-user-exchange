@@ -1,21 +1,11 @@
 version: '3.9'
 services:
-  rabbitmq:
-    image: rabbitmq:3.13-management
-    container_name: queue-rabbitmq
-    ports:
-      - "5672:5672"
-      - "15672:15672" # RabbitMQ Management UI
-    environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
-
   app-api:
     build: .
     container_name: user-queue-api
     command: ["node", "api.js"]
     environment:
-      - RABBIT_URL=amqp://guest:guest@rabbitmq:5672
+      - RABBIT_URL=amqp://admin:admin@rabbitmq:5672
       - PORT=3001
       - ADMIN_API_KEY=change-me
       - PREFETCH=1
@@ -30,7 +20,7 @@ services:
     container_name: user-queue-worker
     command: ["node", "worker.js"]
     environment:
-      - RABBIT_URL=amqp://guest:guest@rabbitmq:5672
+      - RABBIT_URL=amqp://admin:admin@rabbitmq:5672
       - PREFETCH=1
       - DEFAULT_QUEUE_TTL_MS=600000
     depends_on:

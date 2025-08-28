@@ -168,6 +168,24 @@ app.post('/admin/reset-all', adminAuth, async (req, res) => {
   }
 });
 
+// Set default delay antar pesan per user (ms)
+app.post('/admin/set-default-delay', adminAuth, async (req, res) => {
+  try {
+    const { userId, delayMs } = req.body || {};
+    if (!isNonEmptyString(userId)) return res.status(400).json({ error: 'userId required (string)' });
+    const ms = Number(delayMs);
+    if (!Number.isFinite(ms) || ms < 0) return res.status(400).json({ error: 'delayMs must be >= 0' });
+    const q = db.getQueue(userId);
+    if (!q) return res.status(404).json({ error: 'queue not managed' });
+    db.updateQueue(userId, { defaultDelayMs: ms });
+    log.info('admin-set-default-delay', { userId, delayMs: ms });
+    return res.json({ success: true });
+  } catch (e) {
+    log.error('admin-set-default-delay-error', { error: e.message });
+    return res.status(500).json({ error: e.message || 'failed' });
+  }
+});
+
 app.get('/admin/queues', adminAuth, async (req, res) => {
   try {
     const arr = db.listQueueArray();
@@ -180,6 +198,7 @@ app.get('/admin/queues', adminAuth, async (req, res) => {
         routingKey: q.routingKey,
         createdAt: q.createdAt,
         consumerStatus: q.consumerStatus || 'stopped',
+        defaultDelayMs: q.defaultDelayMs || 0,
         processed: q.processed || 0,
         failed: q.failed || 0,
         lastError: q.lastError || null,

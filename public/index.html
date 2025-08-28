@@ -46,6 +46,7 @@
                       <th>Queue</th>
                       <th>Pending</th>
                       <th>Consumer</th>
+                      <th>Def. Delay (ms)</th>
                       <th>Processed</th>
                       <th>Failed</th>
                       <th>Created</th>
@@ -91,6 +92,7 @@
             <td>${q.queueName}</td>
             <td>${q.pendingCount}</td>
             <td>${q.consumerStatus}</td>
+            <td>${q.defaultDelayMs || 0}</td>
             <td>${q.processed}</td>
             <td>${q.failed}</td>
             <td>${q.createdAt || ''}</td>
@@ -98,6 +100,7 @@
               <button class="btn btn-sm btn-success me-1" onclick="startConsumer('${q.userId}')">Start</button>
               <button class="btn btn-sm btn-secondary me-1" onclick="stopConsumer('${q.userId}')">Stop</button>
               <button class="btn btn-sm btn-danger" onclick="resetQueue('${q.userId}')">Reset</button>
+              <button class="btn btn-sm btn-outline-primary ms-1" onclick="setDefaultDelay('${q.userId}')">Set Delay</button>
             </td>
           `;
           tbody.appendChild(tr);
@@ -122,6 +125,13 @@
       }
       async function resetAll() {
         await fetch(apiBase + '/admin/reset-all', { method: 'POST', headers: getHeaders() });
+        fetchQueues();
+      }
+
+      async function setDefaultDelay(userId) {
+        const v = prompt('Masukkan default delay ms untuk ' + userId, '5000');
+        if (!v) return;
+        await fetch(apiBase + '/admin/set-default-delay', { method: 'POST', headers: getHeaders(), body: JSON.stringify({ userId, delayMs: Number(v) }) });
         fetchQueues();
       }
 

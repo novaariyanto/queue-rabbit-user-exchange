@@ -2,7 +2,7 @@
 $url = "https://whatsva.id/api/sendMessageText";
 
 $data = [
-    "instance_key" => "V103EviIU66v",
+    "instance_key" => "MOixAfMQgT2q",
     "jid" => "0895361034833",
     "message" => "hello admin 2"
 ];

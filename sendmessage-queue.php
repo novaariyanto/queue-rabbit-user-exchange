@@ -1,29 +1,29 @@
 <?php
 $api = "http://43.163.121.178:3001/send-message"; // API kita (bukan langsung ke whatsva)
-$callback = "https://webhook.site/df248035-3d86-40c2-ac11-228c4091b81b"; // endpoint asli sebagai callback
+$callback = "https://whatsva.id/api/sendMessageText"; // endpoint asli sebagai callback
 
 // Pesan 1 (delay 5 detik)
 $body1 = [
-  "userId" => "V103EviIU66v",       // dipakai sebagai userId
+  "userId" => "user1",       // dipakai sebagai userId
   "callbackUrl"  => $callback,             // diteruskan oleh worker
   "payload"      => [                      // payload asli untuk endpoint tujuan
-    "instance_key" => "V103EviIU66v",
+    "instance_key" => "MOixAfMQgT2q",
     "jid"          => "0895361034833",
-    "message"      => "hello admin 1"
+    "message"      => "hello 2 seconds"
   ],
-  "delaySeconds" => 5                       // tunda eksekusi 5 detik
+  "delaySeconds" => 2                       // tunda eksekusi 5 detik
 ];
 
 // Pesan 2 (delay 7 detik setelah pesan 1 selesai, karena FIFO + prefetch=1)
 $body2 = [
-  "userId" => "V103EviIU66v",
+  "userId" => "user2",
   "callbackUrl"  => $callback,
   "payload"      => [
-    "instance_key" => "V103EviIU66v",
+    "instance_key" => "MOixAfMQgT2q",
     "jid"          => "0895361034833",
-    "message"      => "hello admin 2"
+    "message"      => "hello 5 seconds"
   ],
-  "delaySeconds" => 7
+  "delaySeconds" => 5
 ];
 
 $headers = [
@@ -43,5 +43,7 @@ function postJson($url, $data, $headers) {
   curl_close($ch);
 }
 
-postJson($api, $body1, $headers);
-postJson($api, $body2, $headers);
+for ($i = 0; $i < 10; $i++) {
+  postJson($api, $body1, $headers);
+  postJson($api, $body2, $headers);
+}

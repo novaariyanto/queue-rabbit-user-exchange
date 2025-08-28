@@ -55,11 +55,20 @@ async function startConsumer(userId) {
         return;
       }
 
-      // Jika ada delayMs, tunda eksekusi sebelum forward HTTP
+      // Tentukan delay: prioritas ke delayMs pada pesan, jika tidak ada pakai defaultDelayMs dari metadata queue
+      let effectiveDelay = 0;
       if (typeof delayMs === 'number' && delayMs > 0) {
-        log.info('delay-start', { userId: uid || userId, delayMs });
-        await new Promise((r) => setTimeout(r, delayMs));
-        log.info('delay-end', { userId: uid || userId, delayMs });
+        effectiveDelay = delayMs;
+      } else {
+        const meta = db.getQueue(uid || userId);
+        if (meta && typeof meta.defaultDelayMs === 'number' && meta.defaultDelayMs > 0) {
+          effectiveDelay = meta.defaultDelayMs;
+        }
+      }
+      if (effectiveDelay > 0) {
+        log.info('delay-start', { userId: uid || userId, delayMs: effectiveDelay });
+        await new Promise((r) => setTimeout(r, effectiveDelay));
+        log.info('delay-end', { userId: uid || userId, delayMs: effectiveDelay });
       }
       // Forward HTTP
       await axios.post(callbackUrl, payload, { timeout: 10000 });

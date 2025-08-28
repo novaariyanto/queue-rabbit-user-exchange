@@ -12,8 +12,6 @@ services:
       - DEFAULT_QUEUE_TTL_MS=600000
     ports:
       - "3001:3001"
-    depends_on:
-      - rabbitmq
 
   app-worker:
     build: .
@@ -23,8 +21,6 @@ services:
       - RABBIT_URL=amqp://guest:guest@rabbitmq:5672
       - PREFETCH=1
       - DEFAULT_QUEUE_TTL_MS=600000
-    depends_on:
-      - rabbitmq
 
 
 

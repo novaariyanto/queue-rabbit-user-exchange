@@ -9,6 +9,8 @@ const amqp = require('amqplib');
 const axios = require('axios');
 const db = require('./db');
 const qm = require('./queue-manager');
+const { createLogger } = require('./logger');
+const log = createLogger('worker');
 
 // Untuk menjaga urutan per user, gunakan prefetch=1 sehingga FIFO per queue terjaga
 const PREFETCH = Number(process.env.PREFETCH || 1);
@@ -49,12 +51,15 @@ async function startConsumer(userId) {
           lastError: 'Missing callbackUrl',
         });
         ch.ack(msg);
+        log.error('missing-callback-url', { userId: uid || userId });
         return;
       }
 
       // Jika ada delayMs, tunda eksekusi sebelum forward HTTP
       if (typeof delayMs === 'number' && delayMs > 0) {
+        log.info('delay-start', { userId: uid || userId, delayMs });
         await new Promise((r) => setTimeout(r, delayMs));
+        log.info('delay-end', { userId: uid || userId, delayMs });
       }
       // Forward HTTP
       await axios.post(callbackUrl, payload, { timeout: 10000 });
@@ -65,6 +70,7 @@ async function startConsumer(userId) {
         lastError: null,
       });
       ch.ack(msg);
+      log.info('processed', { userId: uid || userId, routingKey: msg.fields.routingKey });
     } catch (err) {
       // Retry/backoff sederhana via re-publish dengan delay dan counter attempt di header
       const attempt = (msg.properties?.headers?.['x-attempt'] || 0);
@@ -83,9 +89,10 @@ async function startConsumer(userId) {
               persistent: true,
               headers: { 'x-attempt': attempt + 1 },
             });
+            log.info('republish', { routingKey, nextAttempt: attempt + 1, delayMs });
           } catch (e) {
             // eslint-disable-next-line no-console
-            console.error('Republish failed:', e.message);
+            log.error('republish-failed', { error: e.message });
           }
         }, delayMs);
       } else {
@@ -95,12 +102,14 @@ async function startConsumer(userId) {
           lastError: err?.message || 'unknown',
         });
         ch.nack(msg, false, false);
+        log.error('failed-max-retry', { userId, error: err?.message });
       }
     }
   }, { noAck: false });
 
   consumerMap.set(userId, { consumerTag, queueName });
   db.updateQueue(userId, { consumerStatus: 'started' });
+  log.info('consumer-started', { userId, queueName });
 }
 
 async function stopConsumer(userId) {
@@ -113,6 +122,7 @@ async function stopConsumer(userId) {
   await ch.cancel(meta.consumerTag);
   consumerMap.delete(userId);
   db.updateQueue(userId, { consumerStatus: 'stopped' });
+  log.info('consumer-stopped', { userId });
 }
 
 async function syncConsumers() {
@@ -134,6 +144,7 @@ async function main() {
 
   // eslint-disable-next-line no-console
   console.log('Worker started. Prefetch =', PREFETCH);
+  log.info('worker-started', { prefetch: PREFETCH });
 }
 
 process.on('unhandledRejection', (e) => {

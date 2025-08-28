@@ -8,6 +8,8 @@ const path = require('path');
 
 const db = require('./db');
 const qm = require('./queue-manager');
+const { createLogger } = require('./logger');
+const log = createLogger('api');
 
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
@@ -47,8 +49,10 @@ app.post('/create-queue', async (req, res) => {
     const now = new Date().toISOString();
     // Default: consumerStatus 'started' agar worker auto-subscribe
     db.upsertQueue({ userId, queueName, routingKey, createdAt: now, consumerStatus: 'started' });
+    log.info('create-queue', { userId, queueName, routingKey, ttlMs: ttlMs ?? process.env.DEFAULT_QUEUE_TTL_MS });
     return res.json({ success: true, queueName, routingKey });
   } catch (e) {
+    log.error('create-queue-error', { error: e.message });
     return res.status(500).json({ error: e.message || 'failed' });
   }
 });
@@ -76,8 +80,10 @@ app.post('/send-message', async (req, res) => {
 
     const ts = Date.now();
     const messageId = await qm.publishToUser(userId, { userId, callbackUrl, payload, ts, delayMs }, options || {});
+    log.info('send-message', { userId, messageId, delayMs, callbackHost: (new URL(callbackUrl)).host });
     return res.json({ success: true, messageId });
   } catch (e) {
+    log.error('send-message-error', { error: e.message });
     return res.status(500).json({ error: e.message || 'failed' });
   }
 });
@@ -90,8 +96,10 @@ app.post('/admin/stop-consumer', adminAuth, async (req, res) => {
     const q = db.getQueue(userId);
     if (!q) return res.status(404).json({ error: 'queue not managed' });
     db.updateQueue(userId, { consumerStatus: 'stopped' });
+    log.info('admin-stop-consumer', { userId });
     return res.json({ success: true });
   } catch (e) {
+    log.error('admin-stop-consumer-error', { error: e.message });
     return res.status(500).json({ error: e.message || 'failed' });
   }
 });
@@ -109,8 +117,10 @@ app.post('/admin/start-consumer', adminAuth, async (req, res) => {
     } else {
       db.updateQueue(userId, { consumerStatus: 'started' });
     }
+    log.info('admin-start-consumer', { userId });
     return res.json({ success: true });
   } catch (e) {
+    log.error('admin-start-consumer-error', { error: e.message });
     return res.status(500).json({ error: e.message || 'failed' });
   }
 });
@@ -122,8 +132,10 @@ app.post('/admin/reset-queue', adminAuth, async (req, res) => {
     const q = db.getQueue(userId);
     if (!q) return res.status(404).json({ error: 'queue not managed' });
     const ok = await qm.purgeQueueByName(q.queueName);
+    log.info('admin-reset-queue', { userId, ok });
     return res.json({ success: ok });
   } catch (e) {
+    log.error('admin-reset-queue-error', { error: e.message });
     return res.status(500).json({ error: e.message || 'failed' });
   }
 });
@@ -132,8 +144,10 @@ app.post('/admin/stop-all', adminAuth, async (req, res) => {
   try {
     const all = db.getAllQueues();
     Object.keys(all).forEach((userId) => db.updateQueue(userId, { consumerStatus: 'stopped' }));
+    log.info('admin-stop-all', {});
     return res.json({ success: true });
   } catch (e) {
+    log.error('admin-stop-all-error', { error: e.message });
     return res.status(500).json({ error: e.message || 'failed' });
   }
 });
@@ -146,8 +160,10 @@ app.post('/admin/reset-all', adminAuth, async (req, res) => {
       const ok = await qm.purgeQueueByName(q.queueName);
       if (ok) count += 1;
     }
+    log.info('admin-reset-all', { purged: count });
     return res.json({ success: true, purged: count });
   } catch (e) {
+    log.error('admin-reset-all-error', { error: e.message });
     return res.status(500).json({ error: e.message || 'failed' });
   }
 });
@@ -185,6 +201,7 @@ app.get('/admin/queues', adminAuth, async (req, res) => {
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`API listening on http://localhost:${PORT}`);
+  log.info('api-started', { port: PORT });
 });
 
 

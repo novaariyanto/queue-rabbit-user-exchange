@@ -4,7 +4,7 @@ $callback = "https://webhook.site/df248035-3d86-40c2-ac11-228c4091b81b"; // endp
 
 // Pesan 1 (delay 5 detik)
 $body1 = [
-  "instance_key" => "V103EviIU66v",       // dipakai sebagai userId
+  "userId" => "V103EviIU66v",       // dipakai sebagai userId
   "callbackUrl"  => $callback,             // diteruskan oleh worker
   "payload"      => [                      // payload asli untuk endpoint tujuan
     "instance_key" => "V103EviIU66v",
@@ -16,7 +16,7 @@ $body1 = [
 
 // Pesan 2 (delay 7 detik setelah pesan 1 selesai, karena FIFO + prefetch=1)
 $body2 = [
-  "instance_key" => "V103EviIU66v",
+  "userId" => "V103EviIU66v",
   "callbackUrl"  => $callback,
   "payload"      => [
     "instance_key" => "V103EviIU66v",

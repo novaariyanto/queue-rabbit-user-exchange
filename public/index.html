@@ -27,6 +27,7 @@
               <div class="mt-2">
                 <button class="btn btn-warning btn-sm" onclick="stopAll()">Stop All</button>
                 <button class="btn btn-danger btn-sm" onclick="resetAll()">Reset All</button>
+                <button class="btn btn-outline-secondary btn-sm" onclick="resetDataAll()">Reset Data All</button>
               </div>
             </div>
           </div>
@@ -101,6 +102,7 @@
               <button class="btn btn-sm btn-secondary me-1" onclick="stopConsumer('${q.userId}')">Stop</button>
               <button class="btn btn-sm btn-danger" onclick="resetQueue('${q.userId}')">Reset</button>
               <button class="btn btn-sm btn-outline-primary ms-1" onclick="setDefaultDelay('${q.userId}')">Set Delay</button>
+              <button class="btn btn-sm btn-outline-secondary ms-1" onclick="resetData('${q.userId}')">Reset Data</button>
             </td>
           `;
           tbody.appendChild(tr);
@@ -132,6 +134,16 @@
         const v = prompt('Masukkan default delay ms untuk ' + userId, '5000');
         if (!v) return;
         await fetch(apiBase + '/admin/set-default-delay', { method: 'POST', headers: getHeaders(), body: JSON.stringify({ userId, delayMs: Number(v) }) });
+        fetchQueues();
+      }
+
+      async function resetData(userId) {
+        await fetch(apiBase + '/admin/reset-data', { method: 'POST', headers: getHeaders(), body: JSON.stringify({ userId }) });
+        fetchQueues();
+      }
+
+      async function resetDataAll() {
+        await fetch(apiBase + '/admin/reset-data-all', { method: 'POST', headers: getHeaders() });
         fetchQueues();
       }
 

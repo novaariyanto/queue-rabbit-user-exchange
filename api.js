@@ -217,6 +217,37 @@ app.get('/admin/queues', adminAuth, async (req, res) => {
   }
 });
 
+// Reset data/counter per queue (processed, failed, lastError, lastProcessedAt)
+app.post('/admin/reset-data', adminAuth, async (req, res) => {
+  try {
+    const { userId } = req.body || {};
+    if (!userId || typeof userId !== 'string' || !userId.trim()) {
+      return res.status(400).json({ error: 'userId required (string)' });
+    }
+    const q = db.getQueue(userId);
+    if (!q) return res.status(404).json({ error: 'queue not managed' });
+    db.updateQueue(userId, { processed: 0, failed: 0, lastError: null, lastProcessedAt: null });
+    log.info('admin-reset-data', { userId });
+    return res.json({ success: true });
+  } catch (e) {
+    log.error('admin-reset-data-error', { error: e.message });
+    return res.status(500).json({ error: e.message || 'failed' });
+  }
+});
+
+// Reset data/counter semua queue
+app.post('/admin/reset-data-all', adminAuth, async (req, res) => {
+  try {
+    const all = db.getAllQueues();
+    Object.keys(all).forEach((uid) => db.updateQueue(uid, { processed: 0, failed: 0, lastError: null, lastProcessedAt: null }));
+    log.info('admin-reset-data-all', {});
+    return res.json({ success: true });
+  } catch (e) {
+    log.error('admin-reset-data-all-error', { error: e.message });
+    return res.status(500).json({ error: e.message || 'failed' });
+  }
+});
+
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`API listening on http://localhost:${PORT}`);

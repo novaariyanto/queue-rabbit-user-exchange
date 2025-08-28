@@ -13,6 +13,7 @@ services:
   app-api:
     build: .
     container_name: user-queue-api
+    command: ["node", "api.js"]
     environment:
       - RABBIT_URL=amqp://guest:guest@rabbitmq:5672
       - PORT=3001
@@ -27,6 +28,7 @@ services:
   app-worker:
     build: .
     container_name: user-queue-worker
+    command: ["node", "worker.js"]
     environment:
       - RABBIT_URL=amqp://guest:guest@rabbitmq:5672
       - PREFETCH=1

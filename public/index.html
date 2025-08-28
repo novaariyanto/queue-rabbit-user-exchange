@@ -103,6 +103,7 @@
               <button class="btn btn-sm btn-danger" onclick="resetQueue('${q.userId}')">Reset</button>
               <button class="btn btn-sm btn-outline-primary ms-1" onclick="setDefaultDelay('${q.userId}')">Set Delay</button>
               <button class="btn btn-sm btn-outline-secondary ms-1" onclick="resetData('${q.userId}')">Reset Data</button>
+              <button class="btn btn-sm btn-outline-danger ms-1" onclick="deleteQueue('${q.userId}')">Delete</button>
             </td>
           `;
           tbody.appendChild(tr);
@@ -144,6 +145,12 @@
 
       async function resetDataAll() {
         await fetch(apiBase + '/admin/reset-data-all', { method: 'POST', headers: getHeaders() });
+        fetchQueues();
+      }
+
+      async function deleteQueue(userId) {
+        if (!confirm('Yakin hapus queue ' + userId + ' ?')) return;
+        await fetch(apiBase + '/admin/delete-queue', { method: 'POST', headers: getHeaders(), body: JSON.stringify({ userId }) });
         fetchQueues();
       }
 

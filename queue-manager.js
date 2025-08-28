@@ -76,6 +76,20 @@ async function purgeQueueByUser(userId) {
   return purgeQueueByName(`queue.user.${userId}`);
 }
 
+async function deleteQueueByName(queueName) {
+  const ch = await getChannel();
+  try {
+    await ch.deleteQueue(queueName, { ifUnused: false, ifEmpty: false });
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function deleteQueueByUser(userId) {
+  return deleteQueueByName(`queue.user.${userId}`);
+}
+
 async function getQueueStats(queueName) {
   const ch = await getChannel();
   try {
@@ -99,6 +113,8 @@ module.exports = {
   publishToUser,
   purgeQueueByName,
   purgeQueueByUser,
+  deleteQueueByName,
+  deleteQueueByUser,
   getQueueStats,
 };
 

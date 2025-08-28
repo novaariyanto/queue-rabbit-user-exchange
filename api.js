@@ -140,6 +140,25 @@ app.post('/admin/reset-queue', adminAuth, async (req, res) => {
   }
 });
 
+// Hapus queue: stop consumer, delete queue di broker, hapus metadata
+app.post('/admin/delete-queue', adminAuth, async (req, res) => {
+  try {
+    const { userId } = req.body || {};
+    if (!isNonEmptyString(userId)) return res.status(400).json({ error: 'userId required (string)' });
+    const q = db.getQueue(userId);
+    if (!q) return res.status(404).json({ error: 'queue not managed' });
+    // Hapus di broker
+    const ok = await qm.deleteQueueByName(q.queueName);
+    // Hapus metadata lokal
+    db.deleteQueue(userId);
+    log.info('admin-delete-queue', { userId, ok });
+    return res.json({ success: ok });
+  } catch (e) {
+    log.error('admin-delete-queue-error', { error: e.message });
+    return res.status(500).json({ error: e.message || 'failed' });
+  }
+});
+
 app.post('/admin/stop-all', adminAuth, async (req, res) => {
   try {
     const all = db.getAllQueues();

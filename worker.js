@@ -136,6 +136,16 @@ async function stopConsumer(userId) {
 
 async function syncConsumers() {
   const list = db.listQueueArray();
+  const managedUserIds = new Set(list.map((q) => q.userId));
+
+  // Hentikan consumer untuk userId yang tidak lagi ada di metadata (DB)
+  for (const [uid] of consumerMap.entries()) {
+    if (!managedUserIds.has(uid)) {
+      try { await stopConsumer(uid); } catch (_) {}
+    }
+  }
+
+  // Sinkronkan status start/stop untuk queue yang dikelola
   for (const q of list) {
     if ((q.consumerStatus || 'stopped') === 'started') {
       await startConsumer(q.userId).catch(() => {});

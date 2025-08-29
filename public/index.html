@@ -205,10 +205,11 @@
                         <i class="fas fa-times me-1"></i>Failed 
                         <i class="fas fa-sort text-muted"></i>
                       </th>
-                      <th onclick="sortBy('retried')" style="cursor: pointer;">
-                        <i class="fas fa-redo me-1"></i>Retried 
+                      <th onclick="sortBy('success')" style="cursor: pointer;">
+                        <i class="fas fa-check me-1"></i>Success 
                         <i class="fas fa-sort text-muted"></i>
                       </th>
+                     
                       <th onclick="sortBy('createdAt')" style="cursor: pointer;">
                         <i class="fas fa-calendar me-1"></i>Created 
                         <i class="fas fa-sort text-muted"></i>
@@ -458,8 +459,7 @@
                 ${queue.lastError ? `<br><small class="text-danger" title="${queue.lastError}">Last error</small>` : ''}
               </td>
               <td>
-                <span class="badge ${queue.retried > 0 ? 'bg-warning' : 'bg-secondary'}">${formatNumber(queue.retried || 0)}</span>
-                ${queue.disableRetry ? '<br><small class="text-muted">Retry OFF</small>' : '<br><small class="text-success">Retry ON</small>'}
+                <span class="badge bg-success">${formatNumber(queue.success)}</span>
               </td>
               <td>
                 <small>${formatDate(queue.createdAt)}</small>

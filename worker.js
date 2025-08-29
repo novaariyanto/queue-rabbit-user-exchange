@@ -14,7 +14,7 @@ const log = createLogger('worker');
 
 // Untuk menjaga urutan per user, gunakan prefetch=1 sehingga FIFO per queue terjaga
 const PREFETCH = Number(process.env.PREFETCH || 1);
-const MAX_RETRY = 5; // contoh batas percobaan untuk backoff
+const MAX_RETRY = 0; // contoh batas percobaan untuk backoff
 
 let consumeChannel = null;
 const consumerMap = new Map(); // userId -> { consumerTag, queueName }

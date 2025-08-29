@@ -221,6 +221,7 @@ app.get('/admin/queues', adminAuth, async (req, res) => {
         processed: q.processed || 0,
         failed: q.failed || 0,
         retried: q.retried || 0, // tambahan untuk tracking retry
+        success: q.processed || 0, // alias untuk success rate
         lastError: q.lastError || null,
         lastProcessedAt: q.lastProcessedAt || null,
         pendingCount: stats.messageCount || 0,
@@ -313,6 +314,66 @@ app.post('/admin/toggle-retry', adminAuth, async (req, res) => {
     return res.json({ success: true, disableRetry: !!disableRetry });
   } catch (e) {
     log.error('admin-toggle-retry-error', { error: e.message });
+    return res.status(500).json({ error: e.message || 'failed' });
+  }
+});
+
+// Delete semua queue - DANGEROUS operation
+app.post('/admin/delete-all-queues', adminAuth, async (req, res) => {
+  try {
+    const { confirmText } = req.body || {};
+    
+    // Require confirmation text untuk keamanan
+    if (confirmText !== 'DELETE ALL QUEUES') {
+      return res.status(400).json({ 
+        error: 'Confirmation required. Send confirmText: "DELETE ALL QUEUES"' 
+      });
+    }
+    
+    const allQueues = db.listQueueArray();
+    let deletedCount = 0;
+    let errorCount = 0;
+    const errors = [];
+    
+    // Stop semua consumer dulu
+    allQueues.forEach((q) => {
+      db.updateQueue(q.userId, { consumerStatus: 'stopped' });
+    });
+    
+    // Delete setiap queue di broker dan metadata
+    for (const q of allQueues) {
+      try {
+        // Hapus queue di RabbitMQ
+        const deleted = await qm.deleteQueueByName(q.queueName);
+        if (deleted) {
+          // Hapus metadata dari store
+          db.deleteQueue(q.userId);
+          deletedCount++;
+          log.info('admin-delete-queue-bulk', { userId: q.userId, queueName: q.queueName });
+        } else {
+          errorCount++;
+          errors.push(`Failed to delete queue ${q.queueName}`);
+        }
+      } catch (error) {
+        errorCount++;
+        errors.push(`Error deleting ${q.userId}: ${error.message}`);
+        log.error('admin-delete-queue-bulk-error', { userId: q.userId, error: error.message });
+      }
+    }
+    
+    const result = {
+      success: true,
+      deletedCount,
+      errorCount,
+      totalQueues: allQueues.length,
+      errors: errors.length > 0 ? errors : undefined
+    };
+    
+    log.info('admin-delete-all-queues', result);
+    return res.json(result);
+    
+  } catch (e) {
+    log.error('admin-delete-all-queues-error', { error: e.message });
     return res.status(500).json({ error: e.message || 'failed' });
   }
 });

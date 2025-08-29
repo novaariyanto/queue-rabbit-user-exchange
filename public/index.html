@@ -155,6 +155,9 @@
                 <button class="btn btn-outline-secondary btn-sm" onclick="resetDataAll()" title="Reset Data All">
                   <i class="fas fa-database"></i> Reset Data All
                 </button>
+                <button class="btn btn-outline-danger btn-sm" onclick="deleteAllQueues()" title="Delete All Queues">
+                  <i class="fas fa-trash-alt"></i> Delete All Queues
+                </button>
                 <button class="btn btn-primary btn-sm" onclick="refreshData()" title="Refresh">
                   <i class="fas fa-sync-alt"></i> Refresh
                 </button>
@@ -806,6 +809,74 @@
           }
         } catch (error) {
           showNotification('Error getting debug info: ' + error.message, 'danger');
+        }
+      }
+      
+      async function deleteAllQueues() {
+        // Konfirmasi pertama - peringatan
+        if (!confirm('🚨 PERINGATAN BAHAYA! 🚨\\n\\nAnda akan MENGHAPUS SEMUA QUEUE!\\n\\nIni akan:\\n- Menghapus semua queue dari RabbitMQ\\n- Menghapus semua metadata\\n- Menghentikan semua consumer\\n- KEHILANGAN SEMUA DATA QUEUE\\n\\nApakah Anda yakin ingin melanjutkan?')) {
+          return;
+        }
+        
+        // Konfirmasi kedua - ketik confirmation text
+        const confirmText = prompt('Untuk melanjutkan, ketik persis:\\n\\n"DELETE ALL QUEUES"\\n\\n(tanpa tanda kutip)', '');
+        
+        if (confirmText !== 'DELETE ALL QUEUES') {
+          if (confirmText !== null) { // user tidak cancel
+            showNotification('Konfirmasi tidak tepat. Operasi dibatalkan.', 'warning');
+          }
+          return;
+        }
+        
+        // Konfirmasi terakhir
+        if (!confirm('KONFIRMASI TERAKHIR!\\n\\nAnda telah mengetik konfirmasi yang benar.\\n\\nKlik OK untuk MENGHAPUS SEMUA QUEUE sekarang!\\n\\nTidak ada cara untuk membatalkan setelah ini!')) {
+          return;
+        }
+        
+        try {
+          showNotification('Memulai penghapusan semua queue...', 'info');
+          
+          const res = await fetch(apiBase + '/admin/delete-all-queues', {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({ confirmText: 'DELETE ALL QUEUES' })
+          });
+          
+          if (res.ok) {
+            const result = await res.json();
+            
+            let message = `Penghapusan selesai!\\n\\n`;
+            message += `📊 Statistik:\\n`;
+            message += `✅ Berhasil dihapus: ${result.deletedCount}\\n`;
+            message += `❌ Error: ${result.errorCount}\\n`;
+            message += `📋 Total queue: ${result.totalQueues}\\n`;
+            
+            if (result.errors && result.errors.length > 0) {
+              message += `\\n❌ Error detail:\\n`;
+              result.errors.forEach(error => {
+                message += `- ${error}\\n`;
+              });
+            }
+            
+            if (result.deletedCount > 0) {
+              showNotification(`${result.deletedCount} queue berhasil dihapus`, 'success');
+            }
+            
+            if (result.errorCount > 0) {
+              showNotification(`${result.errorCount} queue gagal dihapus`, 'warning');
+            }
+            
+            alert(message);
+            fetchQueues(); // Refresh dashboard
+            
+          } else {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to delete all queues');
+          }
+          
+        } catch (error) {
+          showNotification('Error menghapus semua queue: ' + error.message, 'danger');
+          console.error('Delete all queues error:', error);
         }
       }
       

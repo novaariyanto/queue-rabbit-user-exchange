@@ -3,60 +3,224 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Admin Panel - User Queue</title>
+    <title>Queue Monitoring Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
-    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+    <style>
+      .status-badge { font-size: 0.75rem; }
+      .queue-card { transition: all 0.2s; }
+      .queue-card:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+      .stats-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+      .search-bar { border-radius: 25px; }
+      .action-btn { margin: 2px; }
+      .table-responsive { max-height: 600px; overflow-y: auto; }
+      .sticky-header { position: sticky; top: 0; background: white; z-index: 10; }
+      .status-running { color: #28a745; }
+      .status-stopped { color: #6c757d; }
+      .status-error { color: #dc3545; }
+      .pending-high { background-color: #fff3cd; }
+      .pending-critical { background-color: #f8d7da; }
+      .toolbar { background: #f8f9fa; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; }
+      .metric-card { border-left: 4px solid; }
+      .metric-success { border-left-color: #28a745; }
+      .metric-warning { border-left-color: #ffc107; }
+      .metric-danger { border-left-color: #dc3545; }
+      .metric-info { border-left-color: #17a2b8; }
+    </style>
   </head>
   <body class="bg-light">
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
       <div class="container-fluid">
-        <a class="navbar-brand" href="#">Admin Queue</a>
-        <div class="d-flex">
-          <input id="apiKey" class="form-control form-control-sm me-2" placeholder="API Key" />
-          <button class="btn btn-sm btn-outline-light" onclick="saveApiKey()">Save</button>
+        <a class="navbar-brand" href="#"><i class="fas fa-stream me-2"></i>Queue Monitoring Dashboard</a>
+        <div class="d-flex align-items-center">
+          <span class="text-light me-3" id="lastUpdate">-</span>
+          <input id="apiKey" class="form-control form-control-sm me-2" placeholder="API Key" style="width: 200px;" />
+          <button class="btn btn-sm btn-outline-light" onclick="saveApiKey()"><i class="fas fa-save"></i></button>
+          <button class="btn btn-sm btn-outline-light ms-2" onclick="toggleAutoRefresh()" id="autoRefreshBtn">
+            <i class="fas fa-pause"></i> Auto
+          </button>
         </div>
       </div>
     </nav>
 
-    <div class="container py-4">
-      <div class="row mb-3">
-        <div class="col">
-          <div class="card">
+    <div class="container-fluid py-4">
+      <!-- Dashboard Statistics -->
+      <div class="row mb-4">
+        <div class="col-lg-3 col-md-6 mb-3">
+          <div class="card metric-card metric-info h-100">
             <div class="card-body">
-              <h5 class="card-title">Dashboard</h5>
-              <div id="summary" class="text-muted">Loading...</div>
-              <div class="mt-2">
-                <button class="btn btn-warning btn-sm" onclick="stopAll()">Stop All</button>
-                <button class="btn btn-danger btn-sm" onclick="resetAll()">Reset All</button>
-                <button class="btn btn-outline-secondary btn-sm" onclick="resetDataAll()">Reset Data All</button>
+              <div class="d-flex justify-content-between">
+                <div>
+                  <h6 class="card-title text-muted mb-1">Total Queues</h6>
+                  <h4 class="mb-0" id="totalQueues">0</h4>
+                </div>
+                <div class="text-primary"><i class="fas fa-stream fa-2x"></i></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
+          <div class="card metric-card metric-warning h-100">
+            <div class="card-body">
+              <div class="d-flex justify-content-between">
+                <div>
+                  <h6 class="card-title text-muted mb-1">Total Pending</h6>
+                  <h4 class="mb-0" id="totalPending">0</h4>
+                </div>
+                <div class="text-warning"><i class="fas fa-clock fa-2x"></i></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
+          <div class="card metric-card metric-success h-100">
+            <div class="card-body">
+              <div class="d-flex justify-content-between">
+                <div>
+                  <h6 class="card-title text-muted mb-1">Active Consumers</h6>
+                  <h4 class="mb-0" id="activeConsumers">0</h4>
+                </div>
+                <div class="text-success"><i class="fas fa-play fa-2x"></i></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
+          <div class="card metric-card metric-danger h-100">
+            <div class="card-body">
+              <div class="d-flex justify-content-between">
+                <div>
+                  <h6 class="card-title text-muted mb-1">Failed Messages</h6>
+                  <h4 class="mb-0" id="totalFailed">0</h4>
+                </div>
+                <div class="text-danger"><i class="fas fa-exclamation-triangle fa-2x"></i></div>
               </div>
             </div>
           </div>
         </div>
       </div>
 
+      <!-- Control Toolbar -->
+      <div class="toolbar">
+        <div class="row align-items-center">
+          <div class="col-md-6">
+            <div class="input-group">
+              <span class="input-group-text"><i class="fas fa-search"></i></span>
+              <input type="text" class="form-control search-bar" id="searchInput" placeholder="Cari queue berdasarkan User ID..." onkeyup="filterQueues()">
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="d-flex gap-2 justify-content-md-end mt-2 mt-md-0">
+              <select class="form-select form-select-sm" id="statusFilter" onchange="filterQueues()" style="width: auto;">
+                <option value="">Semua Status</option>
+                <option value="started">Running</option>
+                <option value="stopped">Stopped</option>
+              </select>
+              <select class="form-select form-select-sm" id="sortBy" onchange="sortQueues()" style="width: auto;">
+                <option value="userId">Sort by User ID</option>
+                <option value="pending">Sort by Pending</option>
+                <option value="processed">Sort by Processed</option>
+                <option value="failed">Sort by Failed</option>
+                <option value="createdAt">Sort by Created</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="row mt-3">
+          <div class="col">
+            <div class="btn-toolbar">
+              <div class="btn-group me-2">
+                <button class="btn btn-success btn-sm" onclick="bulkAction('start')" title="Start Selected">
+                  <i class="fas fa-play"></i> Start Selected
+                </button>
+                <button class="btn btn-warning btn-sm" onclick="bulkAction('stop')" title="Stop Selected">
+                  <i class="fas fa-stop"></i> Stop Selected
+                </button>
+                <button class="btn btn-danger btn-sm" onclick="bulkAction('reset')" title="Reset Selected">
+                  <i class="fas fa-redo"></i> Reset Selected
+                </button>
+              </div>
+              <div class="btn-group me-2">
+                <button class="btn btn-outline-success btn-sm" onclick="bulkAction('startAll')" title="Start All">
+                  <i class="fas fa-play-circle"></i> Start All
+                </button>
+                <button class="btn btn-outline-warning btn-sm" onclick="stopAll()" title="Stop All">
+                  <i class="fas fa-stop-circle"></i> Stop All
+                </button>
+                <button class="btn btn-outline-danger btn-sm" onclick="resetAll()" title="Reset All">
+                  <i class="fas fa-redo-alt"></i> Reset All
+                </button>
+              </div>
+              <div class="btn-group">
+                <button class="btn btn-outline-secondary btn-sm" onclick="resetDataAll()" title="Reset Data All">
+                  <i class="fas fa-database"></i> Reset Data All
+                </button>
+                <button class="btn btn-primary btn-sm" onclick="refreshData()" title="Refresh">
+                  <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Queue Management Table -->
       <div class="row">
         <div class="col">
           <div class="card">
-            <div class="card-body">
-              <h5 class="card-title">Queues</h5>
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <h5 class="card-title mb-0"><i class="fas fa-list me-2"></i>Queue Management</h5>
+              <div class="d-flex align-items-center">
+                <small class="text-muted me-3">Total: <span id="filteredCount">0</span> queue(s)</small>
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="selectAll" onchange="toggleSelectAll()">
+                  <label class="form-check-label" for="selectAll">Select All</label>
+                </div>
+              </div>
+            </div>
+            <div class="card-body p-0">
               <div class="table-responsive">
-                <table class="table table-striped table-sm" id="queueTable">
-                  <thead>
+                <table class="table table-hover table-sm mb-0" id="queueTable">
+                  <thead class="sticky-header table-light">
                     <tr>
-                      <th>User ID</th>
-                      <th>Queue</th>
-                      <th>Pending</th>
-                      <th>Consumer</th>
-                      <th>Def. Delay (ms)</th>
-                      <th>Processed</th>
-                      <th>Failed</th>
-                      <th>Created</th>
-                      <th>Aksi</th>
+                      <th width="40"><input type="checkbox" id="headerCheckbox" onchange="toggleSelectAll()"></th>
+                      <th onclick="sortBy('userId')" style="cursor: pointer;">
+                        <i class="fas fa-user me-1"></i>User ID 
+                        <i class="fas fa-sort text-muted"></i>
+                      </th>
+                      <th onclick="sortBy('pendingCount')" style="cursor: pointer;">
+                        <i class="fas fa-clock me-1"></i>Pending 
+                        <i class="fas fa-sort text-muted"></i>
+                      </th>
+                      <th><i class="fas fa-cog me-1"></i>Status</th>
+                      <th onclick="sortBy('defaultDelayMs')" style="cursor: pointer;">
+                        <i class="fas fa-stopwatch me-1"></i>Delay (ms) 
+                        <i class="fas fa-sort text-muted"></i>
+                      </th>
+                      <th onclick="sortBy('processed')" style="cursor: pointer;">
+                        <i class="fas fa-check me-1"></i>Processed 
+                        <i class="fas fa-sort text-muted"></i>
+                      </th>
+                      <th onclick="sortBy('failed')" style="cursor: pointer;">
+                        <i class="fas fa-times me-1"></i>Failed 
+                        <i class="fas fa-sort text-muted"></i>
+                      </th>
+                      <th onclick="sortBy('createdAt')" style="cursor: pointer;">
+                        <i class="fas fa-calendar me-1"></i>Created 
+                        <i class="fas fa-sort text-muted"></i>
+                      </th>
+                      <th width="200"><i class="fas fa-tools me-1"></i>Actions</th>
                     </tr>
                   </thead>
-                  <tbody></tbody>
+                  <tbody id="queueTableBody"></tbody>
                 </table>
+              </div>
+              <div class="p-3" id="emptyState" style="display: none;">
+                <div class="text-center text-muted">
+                  <i class="fas fa-inbox fa-3x mb-3"></i>
+                  <h5>Tidak ada queue ditemukan</h5>
+                  <p>Buat queue baru atau ubah filter pencarian Anda.</p>
+                </div>
               </div>
             </div>
           </div>
@@ -64,153 +228,520 @@
       </div>
     </div>
 
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
-    <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
+    
     <script>
+      // Global variables
       const apiBase = '';
-      let dt = null;
+      let allQueues = [];
+      let filteredQueues = [];
+      let autoRefresh = true;
+      let refreshInterval;
+      let sortColumn = 'userId';
+      let sortDirection = 'asc';
+      
+      // Utility functions
       function getHeaders() {
         const key = localStorage.getItem('ADMIN_API_KEY') || '';
         return { 'Content-Type': 'application/json', 'x-api-key': key };
       }
+      
       function saveApiKey() {
         const v = document.getElementById('apiKey').value;
         localStorage.setItem('ADMIN_API_KEY', v);
+        showNotification('API Key tersimpan', 'success');
       }
-      document.getElementById('apiKey').value = localStorage.getItem('ADMIN_API_KEY') || '';
-
-      async function fetchQueues() {
-        // Summary ringan
+      
+      function showNotification(message, type = 'info') {
+        // Simple notification system
+        const notification = document.createElement('div');
+        notification.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+        notification.style.cssText = 'top: 80px; right: 20px; z-index: 9999; min-width: 300px;';
+        notification.innerHTML = `
+          ${message}
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.body.appendChild(notification);
+        setTimeout(() => notification.remove(), 5000);
+      }
+      
+      function formatDate(dateString) {
+        if (!dateString) return '-';
         try {
-          const sres = await fetch(apiBase + '/admin/summary', { headers: getHeaders() });
-          if (sres.ok) {
-            const sjson = await sres.json();
-            const { totalQueues, totalPending, activeConsumers } = sjson;
-            const pendingText = (typeof totalPending === 'number') ? totalPending : '—';
-            document.getElementById('summary').innerText = `Total Queues: ${totalQueues} | Pending: ${pendingText} | Active Consumers: ${activeConsumers}`;
-          } else {
-            document.getElementById('summary').innerText = 'Error memuat ringkasan';
-          }
-        } catch (_) {
-          document.getElementById('summary').innerText = 'Error memuat ringkasan';
-        }
-
-        // DataTables server-side
-        if (!dt) {
-          dt = $('#queueTable').DataTable({
-            processing: true,
-            serverSide: true,
-            deferRender: true,
-            stateSave: true,
-            pageLength: 25,
-            lengthMenu: [[25, 50, 100, 250, 500], [25, 50, 100, 250, 500]],
-            order: [[2, 'desc']],
-            ajax: function(data, callback) {
-              const params = new URLSearchParams();
-              Object.keys(data).forEach(k => {
-                const v = data[k];
-                if (typeof v === 'object') {
-                  if (Array.isArray(v)) {
-                    v.forEach((val, idx) => {
-                      if (typeof val === 'object') {
-                        Object.keys(val).forEach(sub => params.append(`${k}[${idx}][${sub}]`, val[sub]));
-                      } else {
-                        params.append(`${k}[]`, val);
-                      }
-                    });
-                  } else if (v !== null) {
-                    Object.keys(v).forEach(sub => params.append(`${k}[${sub}]`, v[sub]));
-                  }
-                } else if (typeof v !== 'undefined' && v !== null) {
-                  params.append(k, v);
-                }
-              });
-              fetch(apiBase + '/admin/queues-dt?' + params.toString(), { headers: getHeaders() })
-                .then(r => r.json())
-                .then(json => {
-                  const rows = (json.data || []).map(q => {
-                    const actions = `
-                      <button class="btn btn-sm btn-success me-1" onclick="startConsumer('${q.userId}')">Start</button>
-                      <button class="btn btn-sm btn-secondary me-1" onclick="stopConsumer('${q.userId}')">Stop</button>
-                      <button class="btn btn-sm btn-danger" onclick="resetQueue('${q.userId}')">Reset</button>
-                      <button class="btn btn-sm btn-outline-primary ms-1" onclick="setDefaultDelay('${q.userId}')">Set Delay</button>
-                      <button class="btn btn-sm btn-outline-secondary ms-1" onclick="resetData('${q.userId}')">Reset Data</button>
-                      <button class="btn btn-sm btn-outline-danger ms-1" onclick="deleteQueue('${q.userId}')">Delete</button>
-                    `;
-                    return [
-                      q.userId,
-                      q.queueName,
-                      q.pendingCount,
-                      q.consumerStatus,
-                      q.defaultDelayMs || 0,
-                      q.processed,
-                      q.failed,
-                      q.createdAt || '',
-                      actions
-                    ];
-                  });
-                  callback({ draw: json.draw, recordsTotal: json.recordsTotal, recordsFiltered: json.recordsFiltered, data: rows });
-                })
-                .catch(() => {
-                  callback({ draw: data.draw, recordsTotal: 0, recordsFiltered: 0, data: [] });
-                });
-            },
-            columnDefs: [
-              { targets: -1, orderable: false, searchable: false }
-            ]
+          return new Date(dateString).toLocaleString('id-ID', {
+            day: '2-digit',
+            month: '2-digit', 
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
           });
-        } else {
-          dt.ajax.reload(null, false);
+        } catch (e) {
+          return dateString;
         }
       }
-
+      
+      function formatNumber(num) {
+        return num?.toLocaleString('id-ID') || '0';
+      }
+      
+      // Auto refresh functionality
+      function toggleAutoRefresh() {
+        autoRefresh = !autoRefresh;
+        const btn = document.getElementById('autoRefreshBtn');
+        if (autoRefresh) {
+          btn.innerHTML = '<i class="fas fa-pause"></i> Auto';
+          btn.className = 'btn btn-sm btn-outline-light ms-2';
+          startAutoRefresh();
+        } else {
+          btn.innerHTML = '<i class="fas fa-play"></i> Manual';
+          btn.className = 'btn btn-sm btn-outline-warning ms-2';
+          stopAutoRefresh();
+        }
+      }
+      
+      function startAutoRefresh() {
+        if (refreshInterval) clearInterval(refreshInterval);
+        refreshInterval = setInterval(fetchQueues, 5000);
+      }
+      
+      function stopAutoRefresh() {
+        if (refreshInterval) clearInterval(refreshInterval);
+      }
+      
+      function refreshData() {
+        fetchQueues();
+        showNotification('Data diperbarui', 'info');
+      }
+      
+      // Main data fetching
+      async function fetchQueues() {
+        try {
+          const res = await fetch(apiBase + '/admin/queues', { headers: getHeaders() });
+          if (!res.ok) {
+            throw new Error('Failed to fetch data');
+          }
+          
+          const json = await res.json();
+          const { totalQueues, totalPending, activeConsumers, queues } = json;
+          
+          // Update dashboard metrics
+          document.getElementById('totalQueues').textContent = formatNumber(totalQueues);
+          document.getElementById('totalPending').textContent = formatNumber(totalPending);
+          document.getElementById('activeConsumers').textContent = formatNumber(activeConsumers);
+          document.getElementById('totalFailed').textContent = formatNumber(queues.reduce((a, b) => a + (b.failed || 0), 0));
+          
+          // Update last refresh time
+          document.getElementById('lastUpdate').textContent = 'Last: ' + new Date().toLocaleTimeString('id-ID');
+          
+          // Store and filter queues
+          allQueues = queues || [];
+          filterQueues();
+          
+        } catch (error) {
+          console.error('Error fetching queues:', error);
+          showNotification('Error memuat data: ' + error.message, 'danger');
+        }
+      }
+      
+      // Filtering and searching
+      function filterQueues() {
+        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+        const statusFilter = document.getElementById('statusFilter').value;
+        
+        filteredQueues = allQueues.filter(queue => {
+          const matchesSearch = queue.userId.toLowerCase().includes(searchTerm);
+          const matchesStatus = !statusFilter || queue.consumerStatus === statusFilter;
+          return matchesSearch && matchesStatus;
+        });
+        
+        sortQueues();
+      }
+      
+      // Sorting functionality
+      function sortQueues() {
+        const sortBy = document.getElementById('sortBy').value;
+        sortColumn = sortBy;
+        
+        filteredQueues.sort((a, b) => {
+          let aVal = a[sortBy];
+          let bVal = b[sortBy];
+          
+          // Handle different data types
+          if (sortBy === 'createdAt') {
+            aVal = new Date(aVal || 0);
+            bVal = new Date(bVal || 0);
+          } else if (typeof aVal === 'string') {
+            aVal = aVal.toLowerCase();
+            bVal = (bVal || '').toLowerCase();
+          } else {
+            aVal = aVal || 0;
+            bVal = bVal || 0;
+          }
+          
+          if (sortDirection === 'asc') {
+            return aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
+          } else {
+            return aVal < bVal ? 1 : aVal > bVal ? -1 : 0;
+          }
+        });
+        
+        renderTable();
+      }
+      
+      function sortBy(column) {
+        if (sortColumn === column) {
+          sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+          sortColumn = column;
+          sortDirection = 'asc';
+        }
+        document.getElementById('sortBy').value = column;
+        sortQueues();
+      }
+      
+      // Table rendering
+      function renderTable() {
+        const tbody = document.getElementById('queueTableBody');
+        const emptyState = document.getElementById('emptyState');
+        
+        document.getElementById('filteredCount').textContent = filteredQueues.length;
+        
+        if (filteredQueues.length === 0) {
+          tbody.innerHTML = '';
+          emptyState.style.display = 'block';
+          return;
+        }
+        
+        emptyState.style.display = 'none';
+        
+        tbody.innerHTML = filteredQueues.map(queue => {
+          const statusClass = queue.consumerStatus === 'started' ? 'status-running' : 'status-stopped';
+          const statusIcon = queue.consumerStatus === 'started' ? 'fa-play-circle' : 'fa-stop-circle';
+          const pendingClass = queue.pendingCount > 100 ? 'pending-critical' : queue.pendingCount > 50 ? 'pending-high' : '';
+          
+          return `
+            <tr class="${pendingClass}" data-user-id="${queue.userId}">
+              <td>
+                <input type="checkbox" class="queue-checkbox" value="${queue.userId}" onchange="updateSelectAllState()">
+              </td>
+              <td>
+                <strong>${queue.userId}</strong>
+                <br><small class="text-muted">${queue.queueName}</small>
+              </td>
+              <td>
+                <span class="badge ${queue.pendingCount > 100 ? 'bg-danger' : queue.pendingCount > 50 ? 'bg-warning' : 'bg-secondary'}">
+                  ${formatNumber(queue.pendingCount)}
+                </span>
+              </td>
+              <td>
+                <i class="fas ${statusIcon} ${statusClass} me-1"></i>
+                <span class="badge ${queue.consumerStatus === 'started' ? 'bg-success' : 'bg-secondary'} status-badge">
+                  ${queue.consumerStatus === 'started' ? 'Running' : 'Stopped'}
+                </span>
+              </td>
+              <td>${formatNumber(queue.defaultDelayMs || 0)}</td>
+              <td>
+                <span class="badge bg-info">${formatNumber(queue.processed)}</span>
+              </td>
+              <td>
+                <span class="badge ${queue.failed > 0 ? 'bg-danger' : 'bg-secondary'}">${formatNumber(queue.failed)}</span>
+                ${queue.lastError ? `<br><small class="text-danger" title="${queue.lastError}">Last error</small>` : ''}
+              </td>
+              <td>
+                <small>${formatDate(queue.createdAt)}</small>
+                ${queue.lastProcessedAt ? `<br><small class="text-muted">Last: ${formatDate(queue.lastProcessedAt)}</small>` : ''}
+              </td>
+              <td>
+                <div class="btn-group-vertical btn-group-sm">
+                  <div class="btn-group btn-group-sm mb-1">
+                    <button class="btn btn-outline-success action-btn" onclick="startConsumer('${queue.userId}')" title="Start" ${queue.consumerStatus === 'started' ? 'disabled' : ''}>
+                      <i class="fas fa-play"></i>
+                    </button>
+                    <button class="btn btn-outline-warning action-btn" onclick="stopConsumer('${queue.userId}')" title="Stop" ${queue.consumerStatus === 'stopped' ? 'disabled' : ''}>
+                      <i class="fas fa-stop"></i>
+                    </button>
+                    <button class="btn btn-outline-danger action-btn" onclick="resetQueue('${queue.userId}')" title="Reset">
+                      <i class="fas fa-redo"></i>
+                    </button>
+                  </div>
+                  <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-primary action-btn" onclick="setDefaultDelay('${queue.userId}')" title="Set Delay">
+                      <i class="fas fa-clock"></i>
+                    </button>
+                    <button class="btn btn-outline-secondary action-btn" onclick="resetData('${queue.userId}')" title="Reset Data">
+                      <i class="fas fa-database"></i>
+                    </button>
+                    <button class="btn btn-outline-danger action-btn" onclick="deleteQueue('${queue.userId}')" title="Delete">
+                      <i class="fas fa-trash"></i>
+                    </button>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+      
+      // Bulk actions
+      function getSelectedQueues() {
+        return Array.from(document.querySelectorAll('.queue-checkbox:checked')).map(cb => cb.value);
+      }
+      
+      function toggleSelectAll() {
+        const selectAllChecked = document.getElementById('selectAll').checked || document.getElementById('headerCheckbox').checked;
+        document.querySelectorAll('.queue-checkbox').forEach(cb => cb.checked = selectAllChecked);
+        document.getElementById('selectAll').checked = selectAllChecked;
+        document.getElementById('headerCheckbox').checked = selectAllChecked;
+      }
+      
+      function updateSelectAllState() {
+        const checkboxes = document.querySelectorAll('.queue-checkbox');
+        const checkedBoxes = document.querySelectorAll('.queue-checkbox:checked');
+        const selectAllCheckbox = document.getElementById('selectAll');
+        const headerCheckbox = document.getElementById('headerCheckbox');
+        
+        if (checkedBoxes.length === 0) {
+          selectAllCheckbox.indeterminate = false;
+          selectAllCheckbox.checked = false;
+          headerCheckbox.indeterminate = false;
+          headerCheckbox.checked = false;
+        } else if (checkedBoxes.length === checkboxes.length) {
+          selectAllCheckbox.indeterminate = false;
+          selectAllCheckbox.checked = true;
+          headerCheckbox.indeterminate = false;
+          headerCheckbox.checked = true;
+        } else {
+          selectAllCheckbox.indeterminate = true;
+          headerCheckbox.indeterminate = true;
+        }
+      }
+      
+      async function bulkAction(action) {
+        const selectedQueues = getSelectedQueues();
+        
+        if (selectedQueues.length === 0 && action !== 'startAll') {
+          showNotification('Pilih queue terlebih dahulu', 'warning');
+          return;
+        }
+        
+        const actionText = {
+          'start': 'start',
+          'stop': 'stop', 
+          'reset': 'reset',
+          'startAll': 'start semua'
+        }[action];
+        
+        if (!confirm(`Yakin ingin ${actionText} ${action === 'startAll' ? 'queue' : selectedQueues.length + ' queue'}?`)) {
+          return;
+        }
+        
+        const queues = action === 'startAll' ? allQueues.map(q => q.userId) : selectedQueues;
+        let successCount = 0;
+        
+        for (const userId of queues) {
+          try {
+            let endpoint, method = 'POST';
+            
+            switch (action) {
+              case 'start':
+              case 'startAll':
+                endpoint = '/admin/start-consumer';
+                break;
+              case 'stop':
+                endpoint = '/admin/stop-consumer';
+                break;
+              case 'reset':
+                endpoint = '/admin/reset-queue';
+                break;
+            }
+            
+            const res = await fetch(apiBase + endpoint, {
+              method,
+              headers: getHeaders(),
+              body: JSON.stringify({ userId })
+            });
+            
+            if (res.ok) successCount++;
+          } catch (error) {
+            console.error(`Error ${action} queue ${userId}:`, error);
+          }
+        }
+        
+        showNotification(`${successCount} queue berhasil di-${actionText}`, successCount > 0 ? 'success' : 'danger');
+        fetchQueues();
+      }
+      
+      // Individual queue actions
       async function startConsumer(userId) {
-        await fetch(apiBase + '/admin/start-consumer', { method: 'POST', headers: getHeaders(), body: JSON.stringify({ userId }) });
-        fetchQueues();
+        try {
+          const res = await fetch(apiBase + '/admin/start-consumer', {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({ userId })
+          });
+          if (res.ok) {
+            showNotification(`Consumer ${userId} berhasil distart`, 'success');
+            fetchQueues();
+          }
+        } catch (error) {
+          showNotification('Error starting consumer: ' + error.message, 'danger');
+        }
       }
+      
       async function stopConsumer(userId) {
-        await fetch(apiBase + '/admin/stop-consumer', { method: 'POST', headers: getHeaders(), body: JSON.stringify({ userId }) });
-        fetchQueues();
+        try {
+          const res = await fetch(apiBase + '/admin/stop-consumer', {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({ userId })
+          });
+          if (res.ok) {
+            showNotification(`Consumer ${userId} berhasil distop`, 'success');
+            fetchQueues();
+          }
+        } catch (error) {
+          showNotification('Error stopping consumer: ' + error.message, 'danger');
+        }
       }
+      
       async function resetQueue(userId) {
-        await fetch(apiBase + '/admin/reset-queue', { method: 'POST', headers: getHeaders(), body: JSON.stringify({ userId }) });
-        fetchQueues();
+        if (!confirm(`Yakin reset queue ${userId}? Semua pesan pending akan dihapus.`)) return;
+        
+        try {
+          const res = await fetch(apiBase + '/admin/reset-queue', {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({ userId })
+          });
+          if (res.ok) {
+            showNotification(`Queue ${userId} berhasil direset`, 'success');
+            fetchQueues();
+          }
+        } catch (error) {
+          showNotification('Error resetting queue: ' + error.message, 'danger');
+        }
       }
+      
       async function stopAll() {
-        await fetch(apiBase + '/admin/stop-all', { method: 'POST', headers: getHeaders() });
-        fetchQueues();
+        if (!confirm('Yakin stop semua consumer?')) return;
+        
+        try {
+          const res = await fetch(apiBase + '/admin/stop-all', {
+            method: 'POST',
+            headers: getHeaders()
+          });
+          if (res.ok) {
+            showNotification('Semua consumer berhasil distop', 'success');
+            fetchQueues();
+          }
+        } catch (error) {
+          showNotification('Error stopping all: ' + error.message, 'danger');
+        }
       }
+      
       async function resetAll() {
-        await fetch(apiBase + '/admin/reset-all', { method: 'POST', headers: getHeaders() });
-        fetchQueues();
+        if (!confirm('Yakin reset semua queue? Semua pesan pending akan dihapus.')) return;
+        
+        try {
+          const res = await fetch(apiBase + '/admin/reset-all', {
+            method: 'POST',
+            headers: getHeaders()
+          });
+          if (res.ok) {
+            showNotification('Semua queue berhasil direset', 'success');
+            fetchQueues();
+          }
+        } catch (error) {
+          showNotification('Error resetting all: ' + error.message, 'danger');
+        }
       }
-
+      
       async function setDefaultDelay(userId) {
-        const v = prompt('Masukkan default delay ms untuk ' + userId, '5000');
-        if (!v) return;
-        await fetch(apiBase + '/admin/set-default-delay', { method: 'POST', headers: getHeaders(), body: JSON.stringify({ userId, delayMs: Number(v) }) });
-        fetchQueues();
+        const currentQueue = allQueues.find(q => q.userId === userId);
+        const currentDelay = currentQueue?.defaultDelayMs || 5000;
+        
+        const delay = prompt(`Masukkan default delay (ms) untuk ${userId}:`, currentDelay);
+        if (delay === null || delay === '') return;
+        
+        const delayMs = Number(delay);
+        if (isNaN(delayMs) || delayMs < 0) {
+          showNotification('Delay harus berupa angka >= 0', 'danger');
+          return;
+        }
+        
+        try {
+          const res = await fetch(apiBase + '/admin/set-default-delay', {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({ userId, delayMs })
+          });
+          if (res.ok) {
+            showNotification(`Default delay ${userId} berhasil diubah ke ${delayMs}ms`, 'success');
+            fetchQueues();
+          }
+        } catch (error) {
+          showNotification('Error setting delay: ' + error.message, 'danger');
+        }
       }
-
+      
       async function resetData(userId) {
-        await fetch(apiBase + '/admin/reset-data', { method: 'POST', headers: getHeaders(), body: JSON.stringify({ userId }) });
-        fetchQueues();
+        if (!confirm(`Yakin reset data counter untuk ${userId}?`)) return;
+        
+        try {
+          const res = await fetch(apiBase + '/admin/reset-data', {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({ userId })
+          });
+          if (res.ok) {
+            showNotification(`Data ${userId} berhasil direset`, 'success');
+            fetchQueues();
+          }
+        } catch (error) {
+          showNotification('Error resetting data: ' + error.message, 'danger');
+        }
       }
-
+      
       async function resetDataAll() {
-        await fetch(apiBase + '/admin/reset-data-all', { method: 'POST', headers: getHeaders() });
-        fetchQueues();
+        if (!confirm('Yakin reset semua data counter?')) return;
+        
+        try {
+          const res = await fetch(apiBase + '/admin/reset-data-all', {
+            method: 'POST',
+            headers: getHeaders()
+          });
+          if (res.ok) {
+            showNotification('Semua data berhasil direset', 'success');
+            fetchQueues();
+          }
+        } catch (error) {
+          showNotification('Error resetting all data: ' + error.message, 'danger');
+        }
       }
-
+      
       async function deleteQueue(userId) {
-        if (!confirm('Yakin hapus queue ' + userId + ' ?')) return;
-        await fetch(apiBase + '/admin/delete-queue', { method: 'POST', headers: getHeaders(), body: JSON.stringify({ userId }) });
-        fetchQueues();
+        if (!confirm(`PERINGATAN: Yakin hapus queue ${userId}? Aksi ini tidak dapat dibatalkan!`)) return;
+        
+        try {
+          const res = await fetch(apiBase + '/admin/delete-queue', {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({ userId })
+          });
+          if (res.ok) {
+            showNotification(`Queue ${userId} berhasil dihapus`, 'success');
+            fetchQueues();
+          }
+        } catch (error) {
+          showNotification('Error deleting queue: ' + error.message, 'danger');
+        }
       }
-
-      fetchQueues();
-      setInterval(fetchQueues, 5000);
+      
+      // Initialize app
+      document.addEventListener('DOMContentLoaded', function() {
+        document.getElementById('apiKey').value = localStorage.getItem('ADMIN_API_KEY') || '';
+        fetchQueues();
+        startAutoRefresh();
+      });
     </script>
   </body>
   </html>

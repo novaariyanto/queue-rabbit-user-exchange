@@ -100,6 +100,59 @@
         </div>
       </div>
 
+      <!-- Idle Queue Status -->
+      <div class="row mb-4">
+        <div class="col-lg-6 col-md-12 mb-3">
+          <div class="card border-warning">
+            <div class="card-header bg-warning text-dark">
+              <h6 class="card-title mb-0"><i class="fas fa-clock me-2"></i>Auto Cleanup Status</h6>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col-6">
+                  <small class="text-muted">Status:</small>
+                  <div class="fw-bold" id="autoCleanupStatus">Loading...</div>
+                </div>
+                <div class="col-6">
+                  <small class="text-muted">Idle Timeout:</small>
+                  <div class="fw-bold" id="idleTimeout">-</div>
+                </div>
+              </div>
+              <div class="row mt-2">
+                <div class="col-6">
+                  <small class="text-muted">Current Idle Queues:</small>
+                  <div class="fw-bold text-warning" id="currentIdleQueues">0</div>
+                </div>
+                <div class="col-6">
+                  <small class="text-muted">Check Interval:</small>
+                  <div class="fw-bold" id="checkInterval">-</div>
+                </div>
+              </div>
+              <div class="mt-3">
+                <button class="btn btn-warning btn-sm" onclick="manualCleanupIdle()" title="Manual Cleanup">
+                  <i class="fas fa-broom"></i> Cleanup Now
+                </button>
+                <button class="btn btn-info btn-sm ms-2" onclick="refreshIdleStatus()" title="Refresh Status">
+                  <i class="fas fa-sync"></i> Refresh
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-6 col-md-12 mb-3">
+          <div class="card border-info">
+            <div class="card-header bg-info text-white">
+              <h6 class="card-title mb-0"><i class="fas fa-info-circle me-2"></i>Idle Queue Details</h6>
+            </div>
+            <div class="card-body">
+              <div id="idleQueuesList">
+                <small class="text-muted">No idle queues found</small>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Control Toolbar -->
       <div class="toolbar">
         <div class="row align-items-center">
@@ -345,9 +398,56 @@
           allQueues = queues || [];
           filterQueues();
           
+          // Fetch idle status
+          fetchIdleStatus();
+          
         } catch (error) {
           console.error('Error fetching queues:', error);
           showNotification('Error memuat data: ' + error.message, 'danger');
+        }
+      }
+      
+      // Fetch idle queue status
+      async function fetchIdleStatus() {
+        try {
+          const res = await fetch(apiBase + '/admin/idle-status', { headers: getHeaders() });
+          if (res.ok) {
+            const data = await res.json();
+            updateIdleStatusDisplay(data);
+          }
+        } catch (error) {
+          console.error('Error fetching idle status:', error);
+        }
+      }
+      
+      function updateIdleStatusDisplay(data) {
+        document.getElementById('autoCleanupStatus').innerHTML = data.enabled 
+          ? '<span class="text-success"><i class="fas fa-check-circle"></i> Enabled</span>' 
+          : '<span class="text-danger"><i class="fas fa-times-circle"></i> Disabled</span>';
+        
+        document.getElementById('idleTimeout').textContent = data.idleTimeoutMinutes + ' minutes';
+        document.getElementById('checkInterval').textContent = data.checkIntervalMinutes + ' minutes';
+        document.getElementById('currentIdleQueues').textContent = data.currentIdleQueues || 0;
+        
+        // Update idle queues list
+        const idleList = document.getElementById('idleQueuesList');
+        if (data.queues && data.queues.length > 0) {
+          idleList.innerHTML = data.queues.map(q => `
+            <div class="mb-2 p-2 border rounded">
+              <div class="d-flex justify-content-between align-items-center">
+                <div>
+                  <strong>${q.userId}</strong>
+                  <br><small class="text-muted">${q.queueName}</small>
+                </div>
+                <div class="text-end">
+                  <span class="badge bg-warning">${q.idleTimeMinutes}m idle</span>
+                  <br><small class="text-muted">${q.consumerStatus}</small>
+                </div>
+              </div>
+            </div>
+          `).join('');
+        } else {
+          idleList.innerHTML = '<small class="text-muted">No idle queues found</small>';
         }
       }
       
@@ -459,6 +559,7 @@
               <td>
                 <small>${formatDate(queue.createdAt)}</small>
                 ${queue.lastProcessedAt ? `<br><small class="text-muted">Last: ${formatDate(queue.lastProcessedAt)}</small>` : ''}
+                ${queue.lastActivityAt ? `<br><small class="text-info">Activity: ${formatDate(queue.lastActivityAt)}</small>` : ''}
               </td>
               <td>
                 <div class="btn-group-vertical btn-group-sm">
@@ -870,6 +971,66 @@
           showNotification('Error menghapus semua queue: ' + error.message, 'danger');
           console.error('Delete all queues error:', error);
         }
+      }
+      
+      // Manual cleanup idle queues
+      async function manualCleanupIdle() {
+        if (!confirm('Yakin ingin menjalankan cleanup manual untuk queue yang idle?\n\nQueue yang idle lebih dari 5 menit akan dihapus.')) {
+          return;
+        }
+        
+        try {
+          showNotification('Menjalankan cleanup idle queues...', 'info');
+          
+          const res = await fetch(apiBase + '/admin/cleanup-idle', {
+            method: 'POST',
+            headers: getHeaders()
+          });
+          
+          if (res.ok) {
+            const result = await res.json();
+            
+            let message = `Cleanup selesai!\\n\\n`;
+            message += `📊 Hasil:\\n`;
+            message += `✅ Dihapus: ${result.deletedCount}\\n`;
+            message += `❌ Error: ${result.errorCount}\\n`;
+            message += `📋 Total diproses: ${result.totalProcessed}\\n`;
+            
+            if (result.errors && result.errors.length > 0) {
+              message += `\\n❌ Error detail:\\n`;
+              result.errors.forEach(error => {
+                message += `- ${error}\\n`;
+              });
+            }
+            
+            if (result.deletedCount > 0) {
+              showNotification(`${result.deletedCount} idle queue berhasil dihapus`, 'success');
+            } else {
+              showNotification('Tidak ada idle queue untuk dihapus', 'info');
+            }
+            
+            if (result.errorCount > 0) {
+              showNotification(`${result.errorCount} queue gagal dihapus`, 'warning');
+            }
+            
+            alert(message);
+            
+            // Refresh data
+            fetchQueues();
+            fetchIdleStatus();
+            
+          } else {
+            throw new Error('Failed to cleanup idle queues');
+          }
+        } catch (error) {
+          showNotification('Error cleanup idle queues: ' + error.message, 'danger');
+        }
+      }
+      
+      // Refresh idle status
+      function refreshIdleStatus() {
+        fetchIdleStatus();
+        showNotification('Status idle diperbarui', 'info');
       }
       
       // Initialize app

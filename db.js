@@ -42,9 +42,11 @@ function getQueue(userId) {
 function upsertQueue(meta) {
   const store = readStore();
   const existing = store.queues[meta.userId] || {};
+  const now = new Date().toISOString();
   store.queues[meta.userId] = {
     processed: 0,
     failed: 0,
+    lastActivityAt: now, // Track last activity for idle detection
     ...existing,
     ...meta,
   };
@@ -71,6 +73,41 @@ function listQueueArray() {
   return Object.values(store.queues || {});
 }
 
+// Fungsi untuk mendapatkan queue yang idle
+function getIdleQueues(idleTimeoutMs = 300000) { // default 5 minutes
+  const store = readStore();
+  const now = Date.now();
+  const idleQueues = [];
+  
+  Object.values(store.queues || {}).forEach(queue => {
+    if (!queue.lastActivityAt) return; // Skip queue tanpa activity tracking
+    
+    const lastActivity = new Date(queue.lastActivityAt).getTime();
+    const idleTime = now - lastActivity;
+    
+    if (idleTime > idleTimeoutMs) {
+      idleQueues.push({
+        ...queue,
+        idleTimeMs: idleTime,
+        idleTimeMinutes: Math.round(idleTime / 60000)
+      });
+    }
+  });
+  
+  return idleQueues;
+}
+
+// Update activity timestamp untuk queue
+function updateActivity(userId) {
+  const store = readStore();
+  if (store.queues[userId]) {
+    store.queues[userId].lastActivityAt = new Date().toISOString();
+    writeStore(store);
+    return true;
+  }
+  return false;
+}
+
 module.exports = {
   getAllQueues,
   getQueue,
@@ -78,6 +115,8 @@ module.exports = {
   updateQueue,
   deleteQueue,
   listQueueArray,
+  getIdleQueues,
+  updateActivity,
   STORE_FILE,
 };
 

@@ -9,6 +9,7 @@ const path = require('path');
 const db = require('./db');
 const qm = require('./queue-manager');
 const { createLogger } = require('./logger');
+const idleCleanup = require('./idle-cleanup');
 const log = createLogger('api');
 
 const app = express();
@@ -80,6 +81,10 @@ app.post('/send-message', async (req, res) => {
 
     const ts = Date.now();
     const messageId = await qm.publishToUser(userId, { userId, callbackUrl, payload, ts, delayMs }, options || {});
+    
+    // Update activity untuk idle tracking
+    db.updateActivity(userId);
+    
     log.info('send-message', { userId, messageId, delayMs, callbackHost: (new URL(callbackUrl)).host });
     return res.json({ success: true, messageId });
   } catch (e) {
@@ -224,6 +229,7 @@ app.get('/admin/queues', adminAuth, async (req, res) => {
         success: q.processed || 0, // alias untuk success rate
         lastError: q.lastError || null,
         lastProcessedAt: q.lastProcessedAt || null,
+        lastActivityAt: q.lastActivityAt || null, // untuk idle tracking
         pendingCount: stats.messageCount || 0,
         consumers: stats.consumerCount || 0,
       });
@@ -374,6 +380,34 @@ app.post('/admin/delete-all-queues', adminAuth, async (req, res) => {
     
   } catch (e) {
     log.error('admin-delete-all-queues-error', { error: e.message });
+    return res.status(500).json({ error: e.message || 'failed' });
+  }
+});
+
+// Get idle queue status dan konfigurasi auto cleanup
+app.get('/admin/idle-status', adminAuth, async (req, res) => {
+  try {
+    const status = idleCleanup.getIdleQueueStatus();
+    return res.json({ success: true, ...status });
+  } catch (e) {
+    log.error('admin-idle-status-error', { error: e.message });
+    return res.status(500).json({ error: e.message || 'failed' });
+  }
+});
+
+// Manual trigger cleanup idle queues
+app.post('/admin/cleanup-idle', adminAuth, async (req, res) => {
+  try {
+    const result = await idleCleanup.manualCleanup();
+    
+    if (result) {
+      log.info('manual-cleanup-triggered', result);
+      return res.json({ success: true, ...result });
+    } else {
+      return res.status(500).json({ error: 'Cleanup failed' });
+    }
+  } catch (e) {
+    log.error('admin-cleanup-idle-error', { error: e.message });
     return res.status(500).json({ error: e.message || 'failed' });
   }
 });

@@ -10,6 +10,7 @@ const axios = require('axios');
 const db = require('./db');
 const qm = require('./queue-manager');
 const { createLogger } = require('./logger');
+const idleCleanup = require('./idle-cleanup');
 const log = createLogger('worker');
 
 // Untuk menjaga urutan per user, gunakan prefetch=1 sehingga FIFO per queue terjaga
@@ -76,6 +77,7 @@ async function startConsumer(userId) {
       db.updateQueue(uid || userId, {
         processed: (db.getQueue(uid || userId)?.processed || 0) + 1,
         lastProcessedAt: new Date().toISOString(),
+        lastActivityAt: new Date().toISOString(), // Update activity untuk idle tracking
         lastError: null,
       });
       ch.ack(msg);
@@ -169,12 +171,20 @@ async function syncConsumers() {
 async function main() {
   await getConsumeChannel();
   await syncConsumers();
+  
+  // Start idle cleanup service
+  idleCleanup.startCleanupService();
+  
   // Poll setiap 5 detik untuk menyesuaikan status start/stop
   setInterval(() => { syncConsumers().catch(() => {}); }, 5000);
 
   // eslint-disable-next-line no-console
-  console.log('Worker started. Prefetch =', PREFETCH);
-  log.info('worker-started', { prefetch: PREFETCH });
+  console.log('Worker started. Prefetch =', PREFETCH, '| Auto cleanup enabled =', idleCleanup.AUTO_CLEANUP_ENABLED);
+  log.info('worker-started', { 
+    prefetch: PREFETCH, 
+    autoCleanupEnabled: idleCleanup.AUTO_CLEANUP_ENABLED,
+    idleTimeoutMinutes: Math.round(idleCleanup.IDLE_TIMEOUT_MS / 60000)
+  });
 }
 
 process.on('unhandledRejection', (e) => {
@@ -184,8 +194,13 @@ process.on('unhandledRejection', (e) => {
 
 process.on('SIGINT', async () => {
   // eslint-disable-next-line no-console
-  console.log('SIGINT received. Closing channel...');
-  try { await consumeChannel?.close(); } catch (_) {}
+  console.log('SIGINT received. Stopping services...');
+  try { 
+    // Stop cleanup service
+    idleCleanup.stopCleanupService();
+    // Close channel
+    await consumeChannel?.close(); 
+  } catch (_) {}
   process.exit(0);
 });
 

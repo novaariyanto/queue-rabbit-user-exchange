@@ -196,10 +196,7 @@
                         <i class="fas fa-sort text-muted"></i>
                       </th>
                       <th><i class="fas fa-cog me-1"></i>Status</th>
-                      <th onclick="sortBy('defaultDelayMs')" style="cursor: pointer;">
-                        <i class="fas fa-stopwatch me-1"></i>Delay (ms) 
-                        <i class="fas fa-sort text-muted"></i>
-                      </th>
+                    
                       <th onclick="sortBy('processed')" style="cursor: pointer;">
                         <i class="fas fa-check me-1"></i>Processed 
                         <i class="fas fa-sort text-muted"></i>
@@ -208,10 +205,7 @@
                         <i class="fas fa-times me-1"></i>Failed 
                         <i class="fas fa-sort text-muted"></i>
                       </th>
-                      <th onclick="sortBy('success')" style="cursor: pointer;">
-                        <i class="fas fa-check me-1"></i>Success 
-                        <i class="fas fa-sort text-muted"></i>
-                      </th>
+                     
                      
                       <th onclick="sortBy('createdAt')" style="cursor: pointer;">
                         <i class="fas fa-calendar me-1"></i>Created 
@@ -453,7 +447,7 @@
                   ${queue.consumerStatus === 'started' ? 'Running' : 'Stopped'}
                 </span>
               </td>
-              <td>${formatNumber(queue.defaultDelayMs || 0)}</td>
+            
               <td>
                 <span class="badge bg-info">${formatNumber(queue.processed)}</span>
               </td>
@@ -461,9 +455,7 @@
                 <span class="badge ${queue.failed > 0 ? 'bg-danger' : 'bg-secondary'}">${formatNumber(queue.failed)}</span>
                 ${queue.lastError ? `<br><small class="text-danger" title="${queue.lastError}">Last error</small>` : ''}
               </td>
-              <td>
-                <span class="badge bg-success">${formatNumber(queue.success)}</span>
-              </td>
+          
               <td>
                 <small>${formatDate(queue.createdAt)}</small>
                 ${queue.lastProcessedAt ? `<br><small class="text-muted">Last: ${formatDate(queue.lastProcessedAt)}</small>` : ''}

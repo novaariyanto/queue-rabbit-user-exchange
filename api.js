@@ -220,6 +220,7 @@ app.get('/admin/queues', adminAuth, async (req, res) => {
         defaultDelayMs: q.defaultDelayMs || 0,
         processed: q.processed || 0,
         failed: q.failed || 0,
+        retried: q.retried || 0, // tambahan untuk tracking retry
         lastError: q.lastError || null,
         lastProcessedAt: q.lastProcessedAt || null,
         pendingCount: stats.messageCount || 0,
@@ -229,8 +230,9 @@ app.get('/admin/queues', adminAuth, async (req, res) => {
     // Ringkasan
     const totalQueues = result.length;
     const totalPending = result.reduce((a, b) => a + (b.pendingCount || 0), 0);
+    const totalRetried = result.reduce((a, b) => a + (b.retried || 0), 0);
     const activeConsumers = result.filter((x) => x.consumerStatus === 'started').length;
-    return res.json({ success: true, totalQueues, totalPending, activeConsumers, queues: result });
+    return res.json({ success: true, totalQueues, totalPending, totalRetried, activeConsumers, queues: result });
   } catch (e) {
     return res.status(500).json({ error: e.message || 'failed' });
   }
@@ -271,6 +273,48 @@ app.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`API listening on http://localhost:${PORT}`);
   log.info('api-started', { port: PORT });
+});
+
+// Debug endpoint untuk melihat detail retry
+app.get('/admin/debug/:userId', adminAuth, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const q = db.getQueue(userId);
+    if (!q) return res.status(404).json({ error: 'queue not found' });
+    
+    const stats = await qm.getQueueStats(q.queueName);
+    const result = {
+      ...q,
+      queueStats: stats,
+      retryInfo: {
+        maxRetry: 5, // MAX_RETRY dari worker
+        backoffFormula: 'Math.min(60000, 1000 * Math.pow(2, attempt))',
+        note: 'Pesan yang gagal akan diretry hingga 5x dengan exponential backoff'
+      }
+    };
+    
+    return res.json({ success: true, debug: result });
+  } catch (e) {
+    return res.status(500).json({ error: e.message || 'failed' });
+  }
+});
+
+// Endpoint untuk disable/enable retry per queue
+app.post('/admin/toggle-retry', adminAuth, async (req, res) => {
+  try {
+    const { userId, disableRetry } = req.body || {};
+    if (!isNonEmptyString(userId)) return res.status(400).json({ error: 'userId required (string)' });
+    
+    const q = db.getQueue(userId);
+    if (!q) return res.status(404).json({ error: 'queue not managed' });
+    
+    db.updateQueue(userId, { disableRetry: !!disableRetry });
+    log.info('admin-toggle-retry', { userId, disableRetry: !!disableRetry });
+    return res.json({ success: true, disableRetry: !!disableRetry });
+  } catch (e) {
+    log.error('admin-toggle-retry-error', { error: e.message });
+    return res.status(500).json({ error: e.message || 'failed' });
+  }
 });
 
 

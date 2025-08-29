@@ -50,8 +50,8 @@ function postJson($url, $data, $headers,$i=1) {
     curl_close($ch);
 }
 
-for ($i = 0; $i < 5; $i++) {
-  for ($j = 0; $j < 1; $j++) {
+for ($i = 0; $i < 100; $i++) {
+ 
     postJson($api, $body1, $headers,$i);
-  }
+
 }

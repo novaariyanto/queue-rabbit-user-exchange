@@ -85,11 +85,21 @@ async function startConsumer(userId) {
       const attempt = (msg.properties?.headers?.['x-attempt'] || 0);
       const routingKey = msg.fields.routingKey;
       const body = msg.content;
+      const queueMeta = db.getQueue(uid || userId);
+      const retryDisabled = queueMeta?.disableRetry || false;
 
-      if (attempt < MAX_RETRY) {
+      // Cek apakah retry disabled untuk queue ini
+      if (!retryDisabled && attempt < MAX_RETRY) {
         const delayMs = Math.min(60000, 1000 * Math.pow(2, attempt));
         // Ack pesan original lalu re-publish dengan attempt+1 setelah delay
         ch.ack(msg);
+        
+        // Update counter retry
+        db.updateQueue(uid || userId, {
+          retried: (db.getQueue(uid || userId)?.retried || 0) + 1,
+          lastError: `Retry attempt ${attempt + 1}: ${err?.message || 'unknown'}`,
+        });
+        
         setTimeout(async () => {
           try {
             const pubCh = await qm.getChannel();
@@ -98,20 +108,21 @@ async function startConsumer(userId) {
               persistent: true,
               headers: { 'x-attempt': attempt + 1 },
             });
-            log.info('republish', { routingKey, nextAttempt: attempt + 1, delayMs });
+            log.info('republish', { userId: uid || userId, routingKey, nextAttempt: attempt + 1, delayMs, error: err?.message });
           } catch (e) {
             // eslint-disable-next-line no-console
-            log.error('republish-failed', { error: e.message });
+            log.error('republish-failed', { userId: uid || userId, error: e.message });
           }
         }, delayMs);
       } else {
-        // Drop setelah mencapai max retry
-        db.updateQueue(userId, {
-          failed: (db.getQueue(userId)?.failed || 0) + 1,
-          lastError: err?.message || 'unknown',
+        // Drop setelah mencapai max retry atau retry disabled
+        const reason = retryDisabled ? 'retry-disabled' : 'max-retry-reached';
+        db.updateQueue(uid || userId, {
+          failed: (db.getQueue(uid || userId)?.failed || 0) + 1,
+          lastError: `${reason}: ${err?.message || 'unknown'}`,
         });
         ch.nack(msg, false, false);
-        log.error('failed-max-retry', { userId, error: err?.message });
+        log.error('failed-dropped', { userId: uid || userId, reason, attempt, error: err?.message });
       }
     }
   }, { noAck: false });

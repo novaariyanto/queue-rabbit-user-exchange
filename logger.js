@@ -26,6 +26,7 @@ function createLogger(name) {
   return {
     info: (msg, meta) => write('info', msg, meta),
     error: (msg, meta) => write('error', msg, meta),
+    debug: (msg, meta) => write('debug', msg, meta),
   };
 }
 

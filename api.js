@@ -276,6 +276,16 @@ app.post('/admin/reset-data-all', adminAuth, async (req, res) => {
   }
 });
 
+// Healthcheck sederhana untuk liveness/probing
+app.get('/health', (_req, res) => {
+  try {
+    const queues = db.listQueueArray().length;
+    return res.json({ ok: true, queues });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message || 'failed' });
+  }
+});
+
 app.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`API listening on http://localhost:${PORT}`);

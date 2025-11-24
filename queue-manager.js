@@ -8,21 +8,66 @@ const EXCHANGE_NAME = 'user_exchange'; // direct exchange per spesifikasi
 
 let connection = null;
 let channel = null; // channel umum untuk operasi manajemen/publish
+let connectionPromise = null; // guard agar hanya satu proses koneksi berjalan
 
 async function getConnection() {
   if (connection) return connection;
-  const url = process.env.RABBIT_URL || 'amqp://localhost:5672';
-  connection = await amqp.connect(url);
-  connection.on('close', () => { connection = null; channel = null; });
-  connection.on('error', () => {});
-  return connection;
+  if (connectionPromise) return connectionPromise;
+
+  const baseUrl = process.env.RABBIT_URL || 'amqp://localhost:5672';
+  const url = baseUrl.includes('?')
+    ? `${baseUrl}&heartbeat=30&connection_timeout=30000`
+    : `${baseUrl}?heartbeat=30&connection_timeout=30000`;
+
+  // Retry ringan dengan backoff: 0.5s, 1s, 2s, 5s (max ~8.5s)
+  const delays = [500, 1000, 2000, 5000];
+  connectionPromise = (async () => {
+    let lastError = null;
+    for (let i = 0; i <= delays.length; i += 1) {
+      try {
+        const conn = await amqp.connect(url);
+        connection = conn;
+        conn.on('close', (e) => {
+          // eslint-disable-next-line no-console
+          console.error('amqp-connection-close', e?.message || e);
+          connection = null;
+          channel = null;
+          connectionPromise = null;
+        });
+        conn.on('error', (e) => {
+          // eslint-disable-next-line no-console
+          console.error('amqp-connection-error', e?.message || e);
+        });
+        return conn;
+      } catch (e) {
+        lastError = e;
+        if (i < delays.length) {
+          await new Promise((r) => setTimeout(r, delays[i]));
+        }
+      }
+    }
+    connectionPromise = null;
+    throw lastError || new Error('Failed to connect to RabbitMQ');
+  })();
+
+  return connectionPromise;
 }
 
 async function getChannel() {
   if (channel) return channel;
   const conn = await getConnection();
-  channel = await conn.createChannel();
-  await channel.assertExchange(EXCHANGE_NAME, 'direct', { durable: true });
+  const ch = await conn.createChannel();
+  ch.on('close', (e) => {
+    // eslint-disable-next-line no-console
+    console.error('amqp-channel-close', e?.message || e);
+    if (channel === ch) channel = null;
+  });
+  ch.on('error', (e) => {
+    // eslint-disable-next-line no-console
+    console.error('amqp-channel-error', e?.message || e);
+  });
+  await ch.assertExchange(EXCHANGE_NAME, 'direct', { durable: true });
+  channel = ch;
   return channel;
 }
 

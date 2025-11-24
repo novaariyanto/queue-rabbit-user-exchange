@@ -17,26 +17,33 @@ const log = createLogger('worker');
 const PREFETCH = Number(process.env.PREFETCH || 1);
 const MAX_RETRY = 0; // contoh batas percobaan untuk backoff
 
-let consumeChannel = null;
-const consumerMap = new Map(); // userId -> { consumerTag, queueName }
+// Map per-user consumer state: userId -> { ch, consumerTag, queueName }
+const consumerMap = new Map();
 
-async function getConsumeChannel() {
-  if (consumeChannel) return consumeChannel;
+async function startConsumer(userId) {
+  if (consumerMap.has(userId)) return; // sudah jalan
+
   const conn = await qm.getConnection();
   const ch = await conn.createChannel();
   await ch.assertExchange(qm.EXCHANGE_NAME, 'direct', { durable: true });
   await ch.prefetch(PREFETCH);
-  consumeChannel = ch;
-  return consumeChannel;
-}
-
-async function startConsumer(userId) {
-  const ch = await getConsumeChannel();
-  if (consumerMap.has(userId)) return; // sudah jalan
 
   const queueName = `queue.user.${userId}`;
   // Pastikan queue ada (jika sempat expired karena idle)
   await qm.createQueueForUser(userId, Number(process.env.DEFAULT_QUEUE_TTL_MS || 600000));
+
+  // Auto resubscribe jika channel tertutup
+  ch.on('close', () => {
+    try { consumerMap.delete(userId); } catch (_) {}
+    db.updateQueue(userId, { consumerStatus: 'stopped' });
+    // Jadwalkan restart ringan
+    setTimeout(() => {
+      startConsumer(userId).catch(() => {});
+    }, 2000);
+  });
+  ch.on('error', (e) => {
+    log.error('channel-error', { userId, error: e?.message });
+  });
 
   const { consumerTag } = await ch.consume(queueName, async (msg) => {
     if (!msg) return; // canceled
@@ -129,7 +136,7 @@ async function startConsumer(userId) {
     }
   }, { noAck: false });
 
-  consumerMap.set(userId, { consumerTag, queueName });
+  consumerMap.set(userId, { ch, consumerTag, queueName });
   db.updateQueue(userId, { consumerStatus: 'started' });
   log.info('consumer-started', { userId, queueName });
 }
@@ -140,8 +147,12 @@ async function stopConsumer(userId) {
     db.updateQueue(userId, { consumerStatus: 'stopped' });
     return;
   }
-  const ch = await getConsumeChannel();
-  await ch.cancel(meta.consumerTag);
+  try {
+    await meta.ch.cancel(meta.consumerTag);
+  } catch (_) {}
+  try {
+    await meta.ch.close();
+  } catch (_) {}
   consumerMap.delete(userId);
   db.updateQueue(userId, { consumerStatus: 'stopped' });
   log.info('consumer-stopped', { userId });
@@ -169,7 +180,6 @@ async function syncConsumers() {
 }
 
 async function main() {
-  await getConsumeChannel();
   await syncConsumers();
   
   // Start idle cleanup service
@@ -177,6 +187,18 @@ async function main() {
   
   // Poll setiap 5 detik untuk menyesuaikan status start/stop
   setInterval(() => { syncConsumers().catch(() => {}); }, 5000);
+
+  // Self-heal ringan: jika DB minta started tapi tidak ada di consumerMap, coba start lagi
+  setInterval(() => {
+    try {
+      const list = db.listQueueArray();
+      for (const q of list) {
+        if ((q.consumerStatus || 'stopped') === 'started' && !consumerMap.has(q.userId)) {
+          startConsumer(q.userId).catch(() => {});
+        }
+      }
+    } catch (_) {}
+  }, 15000);
 
   // eslint-disable-next-line no-console
   console.log('Worker started. Prefetch =', PREFETCH, '| Auto cleanup enabled =', idleCleanup.AUTO_CLEANUP_ENABLED);
@@ -190,6 +212,13 @@ async function main() {
 process.on('unhandledRejection', (e) => {
   // eslint-disable-next-line no-console
   console.error('UnhandledRejection:', e);
+  try { log.error('unhandled-rejection', { error: e?.message || String(e) }); } catch (_) {}
+});
+
+process.on('uncaughtException', (e) => {
+  // eslint-disable-next-line no-console
+  console.error('UncaughtException:', e);
+  try { log.error('uncaught-exception', { error: e?.message || String(e) }); } catch (_) {}
 });
 
 process.on('SIGINT', async () => {
@@ -198,8 +227,12 @@ process.on('SIGINT', async () => {
   try { 
     // Stop cleanup service
     idleCleanup.stopCleanupService();
-    // Close channel
-    await consumeChannel?.close(); 
+    // Close all per-user channels
+    for (const [uid, meta] of consumerMap.entries()) {
+      try { await meta.ch.cancel(meta.consumerTag); } catch (_) {}
+      try { await meta.ch.close(); } catch (_) {}
+      consumerMap.delete(uid);
+    }
   } catch (_) {}
   process.exit(0);
 });
